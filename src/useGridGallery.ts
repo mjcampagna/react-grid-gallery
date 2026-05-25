@@ -216,7 +216,7 @@ export function useGridGallery<T>(
       case ' ':
       case 'Enter':
         e.preventDefault()
-        options.onActivate?.(itemIndex)
+        options.onActivate?.(itemIndex, e.shiftKey)
         break
     }
   }
