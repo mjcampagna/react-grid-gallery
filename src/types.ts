@@ -5,9 +5,12 @@ export type ScrollContainerRef = RefObject<HTMLElement | null> | HTMLElement | n
 export type GridOptions = {
   columns: number | ((containerWidth: number) => number)
   gap?: number | ((containerWidth: number) => number)
-  aspectRatio?: number
+  aspectRatio?: number | ((containerWidth: number) => number)
+  padding?: number
   virtualize?: boolean
   overscan?: number
+  navigable?: boolean
+  onActivate?: (index: number) => void
 }
 
 export type GalleryItem<T> = T & {

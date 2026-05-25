@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import type { ScrollContainerRef } from './types'
 
-function resolveScrollEl(ref: ScrollContainerRef | undefined): HTMLElement | null {
+export function resolveScrollEl(ref: ScrollContainerRef | undefined): HTMLElement | null {
   if (ref == null) return null
   if ('current' in ref) return ref.current
   return ref
