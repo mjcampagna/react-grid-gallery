@@ -190,18 +190,22 @@ export function useGridGallery<T>(
     const rowEnd = Math.min(rowStart + resolvedColumns - 1, items.length - 1)
     switch (e.key) {
       case 'ArrowRight':
+        if (e.metaKey) break
         e.preventDefault()
         navigateTo(itemIndex + 1)
         break
       case 'ArrowLeft':
+        if (e.metaKey) break
         e.preventDefault()
         navigateTo(itemIndex - 1)
         break
       case 'ArrowDown':
+        if (e.metaKey) break
         e.preventDefault()
         navigateTo(itemIndex + resolvedColumns)
         break
       case 'ArrowUp':
+        if (e.metaKey) break
         e.preventDefault()
         navigateTo(itemIndex - resolvedColumns)
         break
