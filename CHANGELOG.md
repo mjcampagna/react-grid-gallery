@@ -13,6 +13,15 @@
 - `renderItem` layout argument now includes `focused: boolean` (always `false` when `navigable` is not set)
 - ARIA grid semantics (`role="grid"`, `role="row"`, `role="gridcell"`, `aria-rowcount`, `aria-colcount`, `aria-rowindex`, `aria-colindex`) applied automatically when `navigable` is true
 
+### Fixed
+
+- Virtual window now recalculates when the scroll container element is resized (via `ResizeObserver`), not only on scroll
+- Virtual window now recalculates on browser window resize when using window-level scrolling
+
+### Changed
+
+- Default `overscan` increased from `cellHeight * 2` to `cellHeight * 4` for smoother fast-scroll behavior
+
 ## 2026-05-22
 
 ### Added
@@ -20,7 +29,7 @@
 - Initial implementation: `GridGallery` component, `useGridGallery` hook, `computeGridLayout` pure function
 - `columns`, `gap`, and `aspectRatio` accept either a number or a responsive callback `(containerWidth: number) => number`
 - `padding` option adds uniform inset inside the grid container
-- Opt-in row virtualization via `virtualize: boolean` and `overscan` (defaults to two cell-heights)
+- Opt-in row virtualization via `virtualize: boolean` and `overscan`
 - `scrollContainerRef` for galleries inside a scrollable div rather than the page
 - `GridGallery` owns cell sizing — the wrapper div for each `renderItem` output is sized to `cellWidth × cellHeight` automatically; consumers do not need to apply dimensions themselves
 - `onLoad` / `onError` handlers exposed from `useGridGallery`; `loaded: boolean` passed to `renderItem` for fade-in effects
