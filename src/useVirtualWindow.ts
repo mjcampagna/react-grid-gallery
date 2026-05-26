@@ -59,9 +59,14 @@ export function useVirtualWindow(
 
     const target = resolveScrollEl(scrollContainerRef) ?? window
     target.addEventListener('scroll', handleScroll, { passive: true })
+
+    const ro = new ResizeObserver(update)
+    if (target !== window) ro.observe(target as HTMLElement)
+
     return () => {
       target.removeEventListener('scroll', handleScroll)
       if (rafIdRef.current !== null) cancelAnimationFrame(rafIdRef.current)
+      ro.disconnect()
     }
   }, [enabled, containerRef, scrollContainerRef])
 

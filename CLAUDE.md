@@ -46,7 +46,7 @@ The library exposes three levels of abstraction, all exported from `src/index.ts
 
 All shared types live in [src/types.ts](src/types.ts): `GalleryItem<T>`, `GridOptions`, `GridLayoutRow<T>`, `GridRow<T>`, `ScrollContainerRef`.
 
-`GridOptions` fields: `columns` (required), `gap`, `aspectRatio` (default `1`), `virtualize` (default `false`), `overscan` (default `cellHeight * 2`).
+`GridOptions` fields: `columns` (required), `gap`, `aspectRatio` (default `1`), `virtualize` (default `false`), `overscan` (default `cellHeight * 4`).
 
 ### Build output
 

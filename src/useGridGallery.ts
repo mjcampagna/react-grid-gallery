@@ -125,7 +125,7 @@ export function useGridGallery<T>(
 
   if (options.virtualize && virtualRange !== null && prevRowsRef.current.length > 0) {
     const totalRows = prevRowsRef.current.length
-    const overscan = options.overscan ?? cellHeight * 2
+    const overscan = options.overscan ?? cellHeight * 4
     const visibleTop = virtualRange.top - overscan
     const visibleBottom = virtualRange.bottom + overscan
 
