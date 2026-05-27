@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type React from 'react'
 
 import { computeGridLayout } from './computeGridLayout'
@@ -38,9 +38,7 @@ export function useGridGallery<T>(
   const pendingFocusRef = useRef<number | null>(null)
 
   const loadedSet = useRef<Set<string | number>>(new Set())
-  const [, rerender] = useReducer(n => n + 1, 0)
-
-  const prevRowsRef = useRef<GridRow<T>[]>([])
+  const [loadedVersion, setLoadedVersion] = useState(0)
 
   const virtualRange = useVirtualWindow(containerRef, options.virtualize === true, scrollContainerRef)
 
@@ -61,7 +59,7 @@ export function useGridGallery<T>(
   const onLoad = useCallback((key: string | number) => {
     if (!loadedSet.current.has(key)) {
       loadedSet.current.add(key)
-      rerender()
+      setLoadedVersion(v => v + 1)
     }
   }, [])
 
@@ -85,10 +83,10 @@ export function useGridGallery<T>(
       : 0
   const cellHeight = cellWidth > 0 ? Math.round(cellWidth / resolvedAspectRatio) : 0
 
-  let rows: GridRow<T>[] = []
-  if (containerWidth > 0 && cellWidth > 0) {
+  const rows = useMemo(() => {
+    if (cellWidth === 0) return []
     const layoutRows = computeGridLayout(items, resolvedColumns, cellWidth, cellHeight)
-    rows = layoutRows.map(row => ({
+    return layoutRows.map(row => ({
       height: row.height,
       items: row.items.map(item => ({
         item,
@@ -97,34 +95,15 @@ export function useGridGallery<T>(
         loaded: loadedSet.current.has(item.key),
       })),
     }))
-  }
-
-  // Stabilize the rows reference — only replace when content actually changes
-  const isStable =
-    rows.length === prevRowsRef.current.length &&
-    rows.every((row, i) => {
-      const prev = prevRowsRef.current[i]
-      return (
-        row.height === prev?.height &&
-        row.items.length === prev?.items.length &&
-        row.items.every(
-          (cell, j) =>
-            cell.loaded === prev.items[j]?.loaded &&
-            cell.item === prev.items[j]?.item,
-        )
-      )
-    })
-  if (!isStable) {
-    prevRowsRef.current = rows
-  }
+  }, [items, resolvedColumns, cellWidth, cellHeight, loadedVersion])
 
   // ─── Virtual window ────────────────────────────────────────────────────────
 
   const rowStride = cellHeight + resolvedGap
   let virtualWindow: VirtualWindow | null = null
 
-  if (options.virtualize && virtualRange !== null && prevRowsRef.current.length > 0) {
-    const totalRows = prevRowsRef.current.length
+  if (options.virtualize && virtualRange !== null && rows.length > 0) {
+    const totalRows = rows.length
     const overscan = options.overscan ?? cellHeight * 4
     const visibleTop = virtualRange.top - overscan
     const visibleBottom = virtualRange.bottom + overscan
@@ -237,7 +216,7 @@ export function useGridGallery<T>(
 
   return {
     containerRef,
-    rows: prevRowsRef.current,
+    rows,
     cellWidth,
     cellHeight,
     gap: resolvedGap,
