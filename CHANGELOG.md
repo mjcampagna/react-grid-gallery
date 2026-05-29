@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-05-29
+
+### Added
+
+- `focusedIndex?: number` — controlled focused index prop. When provided, suppresses internal focus state; the prop owns the roving tabindex seat. Pair with `onFocusedIndexChange` if you need to react to keyboard navigation.
+- `onFocusedIndexChange?: (index: number) => void` — optional callback fired when navigation would change the focused index
+
+### Changed
+
+- `onActivate` callback now receives `shiftKey: boolean` as a second argument: `(index: number, shiftKey: boolean) => void`
+- Arrow key navigation is now skipped when the Meta key is held, allowing browser shortcuts (e.g. Cmd+Left/Right) to pass through
+
+### Performance
+
+- Row layout (`computeGridLayout`) is now memoized and skips entirely during scroll — O(n) work no longer runs on every animation frame
+
 ## 2026-05-25
 
 ### Added
@@ -7,7 +23,7 @@
 - **Keyboard navigation** — opt in with `navigable: true` on `GridGallery` or `useGridGallery`
   - Arrow keys move focus through the grid; Up/Down move by row, Left/Right wrap across row boundaries
   - `Home` / `End` jump to the first/last item in the current row; `Ctrl+Home` / `Ctrl+End` jump to the first/last item in the grid
-  - Space and Enter fire the new `onActivate: (index: number) => void` callback
+  - Space and Enter fire the new `onActivate` callback
   - Roving tabindex: only the focused cell is in the tab order
   - Works with virtualization — navigating to an off-screen item scrolls it into view before focusing
 - `renderItem` layout argument now includes `focused: boolean` (always `false` when `navigable` is not set)

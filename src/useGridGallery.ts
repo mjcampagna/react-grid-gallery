@@ -125,6 +125,7 @@ export function useGridGallery<T>(
 
   // ─── Navigation ────────────────────────────────────────────────────────────
 
+  const isControlled = options.focusedIndex !== undefined
   const padding = options.padding ?? 0
 
   function scrollToRow(rowIndex: number): void {
@@ -153,7 +154,8 @@ export function useGridGallery<T>(
   function navigateTo(newIndex: number): void {
     if (items.length === 0) return
     const clamped = Math.max(0, Math.min(newIndex, items.length - 1))
-    setFocusedIndex(clamped)
+    if (!isControlled) setFocusedIndex(clamped)
+    options.onFocusedIndexChange?.(clamped)
     const target = containerRef.current?.querySelector<HTMLElement>(`[data-grid-index="${clamped}"]`)
     if (target) {
       target.focus()
@@ -214,6 +216,13 @@ export function useGridGallery<T>(
     }
   })
 
+  const effectiveFocusedIndex = isControlled ? options.focusedIndex! : focusedIndex
+
+  function handleItemFocus(index: number): void {
+    if (!isControlled) setFocusedIndex(index)
+    options.onFocusedIndexChange?.(index)
+  }
+
   return {
     containerRef,
     rows,
@@ -224,8 +233,8 @@ export function useGridGallery<T>(
     onLoad,
     onError,
     virtualWindow,
-    focusedIndex,
-    handleItemFocus: setFocusedIndex,
+    focusedIndex: effectiveFocusedIndex,
+    handleItemFocus,
     handleItemKeyDown,
   }
 }

@@ -8,6 +8,8 @@ React photo gallery with a fixed-column grid layout. Cells have a uniform size d
 - **Responsive** — `columns`, `gap`, and `aspectRatio` accept `(containerWidth: number) => number` callbacks, re-evaluated on every container resize
 - **Virtualization** — opt-in `virtualize` prop renders only rows near the viewport via spacer divs; no overhead when disabled
 - **`loaded` state** — track browser image load state per item for fade-in effects
+- **Keyboard navigation** — opt-in `navigable` prop; full arrow key and Home/End navigation with ARIA grid semantics
+- **Controlled focus** — `focusedIndex` prop lets external state own the roving tabindex seat
 - **Three-layer API** — use the full component, the hook, or the pure layout function depending on how much control you need
 - ESM only · zero runtime dependencies · `sideEffects: false`
 
@@ -68,9 +70,14 @@ import { GridGallery } from '@slithy/react-grid-gallery'
 | `columns` | `number \| (containerWidth: number) => number` | — | Number of columns |
 | `gap` | `number \| (containerWidth: number) => number` | `0` | Gap between cells in pixels |
 | `aspectRatio` | `number \| (containerWidth: number) => number` | `1` | Cell aspect ratio as width/height — `1` is square, `4/5` is portrait, `16/9` is landscape |
+| `padding` | `number` | `0` | Uniform padding inside the grid container in pixels |
 | `virtualize` | `boolean` | `false` | Only render rows near the viewport; spacer divs maintain full scroll height. Opt-in — no overhead when disabled. |
-| `overscan` | `number` | `cellHeight * 2` | Extra pixels to render beyond the viewport edge in each direction |
+| `overscan` | `number` | `cellHeight * 4` | Extra pixels to render beyond the viewport edge in each direction |
 | `scrollContainerRef` | `ScrollContainerRef` | — | Required when the gallery is inside a scrollable div. The scroll listener attaches to this element instead of `window`. |
+| `navigable` | `boolean` | `false` | Enable keyboard navigation and ARIA grid semantics |
+| `focusedIndex` | `number` | — | Controlled focused index. When provided, suppresses internal focus state — the prop owns the roving tabindex seat. |
+| `onFocusedIndexChange` | `(index: number) => void` | — | Fired when navigation would change the focused index. Only needed when using `focusedIndex` and want to sync external state. |
+| `onActivate` | `(index: number, shiftKey: boolean) => void` | — | Fired when Space or Enter is pressed on a focused cell |
 
 **`renderItem` arguments:**
 
@@ -78,6 +85,7 @@ import { GridGallery } from '@slithy/react-grid-gallery'
 |---|---|---|
 | `item` | `GalleryItem<T>` | The original item |
 | `layout.loaded` | `boolean` | Whether the browser has confirmed this image loaded via `handlers.onLoad` |
+| `layout.focused` | `boolean` | Whether this cell is currently focused. Always `false` when `navigable` is not set. |
 | `handlers.onLoad` | `ReactEventHandler<HTMLImageElement>` | Pass to `<img onLoad={...}>` to mark the item loaded |
 | `handlers.onError` | `ReactEventHandler<HTMLImageElement>` | Pass to `<img onError={...}>` for error handling |
 
@@ -110,6 +118,54 @@ const scrollRef = useRef<HTMLDivElement>(null)
     renderItem={...}
   />
 </div>
+```
+
+---
+
+## Keyboard navigation
+
+Enable with `navigable`. Arrow keys move focus through the grid; Space/Enter activate the focused item.
+
+```tsx
+<GridGallery
+  items={photos}
+  columns={4}
+  navigable
+  onActivate={(index, shiftKey) => openLightbox(index, shiftKey)}
+  renderItem={(item, { loaded, focused }, handlers) => (
+    <img
+      src={item.src}
+      style={{ outline: focused ? '2px solid blue' : 'none', opacity: loaded ? 1 : 0 }}
+      {...handlers}
+    />
+  )}
+/>
+```
+
+**Key bindings:**
+
+| Key | Action |
+|---|---|
+| Arrow keys | Move focus one cell in that direction; Left/Right wrap across row boundaries |
+| `Home` / `End` | First / last item in the current row |
+| `Ctrl+Home` / `Ctrl+End` | First / last item in the grid |
+| `Space` / `Enter` | Fire `onActivate` |
+
+When `navigable` is true, `role="grid"`, `role="row"`, and `role="gridcell"` are added to the container, row, and cell elements respectively, with `aria-rowcount`, `aria-colcount`, `aria-rowindex`, and `aria-colindex`.
+
+**Controlled focus:** pass `focusedIndex` to drive the roving tabindex seat from external state. Internal focus state is suppressed — the prop owns the seat. Pair with `onFocusedIndexChange` if you need to react to keyboard navigation:
+
+```tsx
+const [activeIndex, setActiveIndex] = useState(0)
+
+<GridGallery
+  items={photos}
+  columns={4}
+  navigable
+  focusedIndex={activeIndex}
+  onFocusedIndexChange={setActiveIndex}
+  renderItem={...}
+/>
 ```
 
 ---
@@ -150,6 +206,9 @@ const { containerRef, rows, cellWidth, cellHeight, gap, columns, onLoad, onError
 | `onLoad` | `(key: string \| number) => void` | Call when an image loads to mark it loaded |
 | `onError` | `(key: string \| number) => void` | Call when an image fails to load |
 | `virtualWindow` | `{ firstIndex, lastIndex, topSpacerHeight, bottomSpacerHeight } \| null` | Set when `virtualize` is true |
+| `focusedIndex` | `number` | Currently focused item index. Reflects `options.focusedIndex` when controlled. |
+| `handleItemFocus` | `(index: number) => void` | Pass to each cell's `onFocus` handler to sync focus state |
+| `handleItemKeyDown` | `(itemIndex: number, e: React.KeyboardEvent) => void` | Pass to each cell's `onKeyDown` handler to enable keyboard navigation |
 
 ---
 

@@ -10,6 +10,8 @@ export type GridOptions = {
   virtualize?: boolean
   overscan?: number
   navigable?: boolean
+  focusedIndex?: number
+  onFocusedIndexChange?: (index: number) => void
   onActivate?: (index: number, shiftKey: boolean) => void
 }
 
