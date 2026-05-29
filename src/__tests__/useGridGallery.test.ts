@@ -1,0 +1,270 @@
+import { act, renderHook } from '@testing-library/react'
+
+import { useGridGallery } from '../useGridGallery'
+import type { GalleryItem, GridOptions } from '../types'
+
+// ─── Global mocks ─────────────────────────────────────────────────────────────
+
+beforeAll(() => {
+  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { cb(0); return 0 })
+  vi.stubGlobal('cancelAnimationFrame', vi.fn())
+})
+
+// ─── ResizeObserver mock ──────────────────────────────────────────────────────
+//
+// The hook attaches ResizeObserver inside a useEffect, gated on containerRef
+// having a DOM element. In renderHook there's no real DOM so observe() is never
+// called — we capture the callback in the constructor so tests can fire resize
+// events directly.
+
+let fireResize: (width: number) => void = () => {}
+
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(cb: ResizeObserverCallback) {
+      fireResize = (width: number) =>
+        act(() => { cb([{ contentRect: { width } } as ResizeObserverEntry], this as unknown as ResizeObserver) })
+    }
+    observe() {}
+    disconnect() {}
+  })
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function item(key: string): GalleryItem<{ key: string }> {
+  return { key }
+}
+
+// 9 items, 3 columns, 300px wide → 100px cells (no gap)
+const ITEMS = ['0','1','2','3','4','5','6','7','8'].map(item)
+const OPTIONS: GridOptions = { columns: 3 }
+const WIDTH = 300
+
+// ─── Layout ───────────────────────────────────────────────────────────────────
+
+describe('layout', () => {
+  it('returns empty rows before a resize fires', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, OPTIONS))
+    expect(result.current.rows).toHaveLength(0)
+    expect(result.current.cellWidth).toBe(0)
+  })
+
+  it('computes cellWidth and rows after a resize', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, OPTIONS))
+    fireResize(WIDTH)
+    expect(result.current.cellWidth).toBe(100)
+    expect(result.current.rows).toHaveLength(3)
+    expect(result.current.columns).toBe(3)
+  })
+
+  it('respects gap when computing cellWidth', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, { columns: 3, gap: 10 }))
+    // (300 - 10*2) / 3 = 280/3 = floor(93.3) = 93
+    fireResize(WIDTH)
+    expect(result.current.cellWidth).toBe(93)
+    expect(result.current.gap).toBe(10)
+  })
+
+  it('resolves a responsive columns callback', () => {
+    const { result } = renderHook(() =>
+      useGridGallery(ITEMS, { columns: w => (w < 400 ? 2 : 4) })
+    )
+    fireResize(300)
+    expect(result.current.columns).toBe(2)
+    fireResize(500)
+    expect(result.current.columns).toBe(4)
+  })
+})
+
+// ─── Keyboard navigation ──────────────────────────────────────────────────────
+
+function key(k: string, extra: Partial<React.KeyboardEvent> = {}): React.KeyboardEvent {
+  return { key: k, preventDefault: vi.fn(), metaKey: false, ctrlKey: false, shiftKey: false, ...extra } as unknown as React.KeyboardEvent
+}
+
+describe('handleItemKeyDown', () => {
+  it('ArrowRight moves focus forward by 1', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, { ...OPTIONS, navigable: true }))
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemKeyDown(2, key('ArrowRight')) })
+    expect(result.current.focusedIndex).toBe(3)
+  })
+
+  it('ArrowLeft moves focus back by 1', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, { ...OPTIONS, navigable: true }))
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemKeyDown(4, key('ArrowLeft')) })
+    expect(result.current.focusedIndex).toBe(3)
+  })
+
+  it('ArrowDown moves focus forward by one row', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, { ...OPTIONS, navigable: true }))
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemKeyDown(1, key('ArrowDown')) })
+    expect(result.current.focusedIndex).toBe(4)
+  })
+
+  it('ArrowUp moves focus back by one row', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, { ...OPTIONS, navigable: true }))
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemKeyDown(4, key('ArrowUp')) })
+    expect(result.current.focusedIndex).toBe(1)
+  })
+
+  it('ArrowRight wraps from last item of a row to first of next', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, { ...OPTIONS, navigable: true }))
+    fireResize(WIDTH)
+
+    // item 2 is last in row 0; next is item 3 (first of row 1)
+    act(() => { result.current.handleItemKeyDown(2, key('ArrowRight')) })
+    expect(result.current.focusedIndex).toBe(3)
+  })
+
+  it('ArrowLeft wraps from first item of a row to last of previous', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, { ...OPTIONS, navigable: true }))
+    fireResize(WIDTH)
+
+    // item 3 is first of row 1; previous is item 2 (last of row 0)
+    act(() => { result.current.handleItemKeyDown(3, key('ArrowLeft')) })
+    expect(result.current.focusedIndex).toBe(2)
+  })
+
+  it('ArrowRight clamps at the last item', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, { ...OPTIONS, navigable: true }))
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemKeyDown(8, key('ArrowRight')) })
+    expect(result.current.focusedIndex).toBe(8)
+  })
+
+  it('ArrowUp clamps at first item', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, { ...OPTIONS, navigable: true }))
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemKeyDown(1, key('ArrowUp')) })
+    expect(result.current.focusedIndex).toBe(0)
+  })
+
+  it('Home moves to first item in the current row', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, { ...OPTIONS, navigable: true }))
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemKeyDown(4, key('Home')) })
+    expect(result.current.focusedIndex).toBe(3)
+  })
+
+  it('End moves to last item in the current row', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, { ...OPTIONS, navigable: true }))
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemKeyDown(4, key('End')) })
+    expect(result.current.focusedIndex).toBe(5)
+  })
+
+  it('Ctrl+Home moves to first item in the grid', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, { ...OPTIONS, navigable: true }))
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemKeyDown(7, key('Home', { ctrlKey: true })) })
+    expect(result.current.focusedIndex).toBe(0)
+  })
+
+  it('Ctrl+End moves to last item in the grid', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, { ...OPTIONS, navigable: true }))
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemKeyDown(1, key('End', { ctrlKey: true })) })
+    expect(result.current.focusedIndex).toBe(8)
+  })
+
+  it('does not navigate when Meta key is held on arrow keys', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, { ...OPTIONS, navigable: true }))
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemKeyDown(4, key('ArrowRight', { metaKey: true })) })
+    expect(result.current.focusedIndex).toBe(0) // unchanged from initial
+  })
+
+  it('fires onActivate with shiftKey on Space', () => {
+    const onActivate = vi.fn()
+    const { result } = renderHook(() =>
+      useGridGallery(ITEMS, { ...OPTIONS, navigable: true, onActivate })
+    )
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemKeyDown(3, key(' ', { shiftKey: true })) })
+    expect(onActivate).toHaveBeenCalledWith(3, true)
+  })
+
+  it('fires onActivate with shiftKey on Enter', () => {
+    const onActivate = vi.fn()
+    const { result } = renderHook(() =>
+      useGridGallery(ITEMS, { ...OPTIONS, navigable: true, onActivate })
+    )
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemKeyDown(5, key('Enter', { shiftKey: false })) })
+    expect(onActivate).toHaveBeenCalledWith(5, false)
+  })
+})
+
+// ─── Controlled focusedIndex ──────────────────────────────────────────────────
+
+describe('controlled focusedIndex', () => {
+  it('reflects the prop value as focusedIndex', () => {
+    const { result } = renderHook(() =>
+      useGridGallery(ITEMS, { ...OPTIONS, navigable: true, focusedIndex: 5 })
+    )
+    fireResize(WIDTH)
+    expect(result.current.focusedIndex).toBe(5)
+  })
+
+  it('does not change internal state when navigation fires while controlled', () => {
+    const onFocusedIndexChange = vi.fn()
+    const { result } = renderHook(() =>
+      useGridGallery(ITEMS, { ...OPTIONS, navigable: true, focusedIndex: 0, onFocusedIndexChange })
+    )
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemKeyDown(0, key('ArrowRight')) })
+
+    // prop is still 0 (the hook doesn't own the state)
+    expect(result.current.focusedIndex).toBe(0)
+    // but the callback was fired so the owner can update
+    expect(onFocusedIndexChange).toHaveBeenCalledWith(1)
+  })
+
+  it('fires onFocusedIndexChange when handleItemFocus is called while controlled', () => {
+    const onFocusedIndexChange = vi.fn()
+    const { result } = renderHook(() =>
+      useGridGallery(ITEMS, { ...OPTIONS, navigable: true, focusedIndex: 0, onFocusedIndexChange })
+    )
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemFocus(3) })
+    expect(onFocusedIndexChange).toHaveBeenCalledWith(3)
+    expect(result.current.focusedIndex).toBe(0) // prop unchanged
+  })
+
+  it('tracks internal state when focusedIndex prop is absent', () => {
+    const { result } = renderHook(() =>
+      useGridGallery(ITEMS, { ...OPTIONS, navigable: true })
+    )
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemKeyDown(0, key('ArrowRight')) })
+    expect(result.current.focusedIndex).toBe(1)
+
+    act(() => { result.current.handleItemKeyDown(1, key('ArrowDown')) })
+    expect(result.current.focusedIndex).toBe(4)
+  })
+})
