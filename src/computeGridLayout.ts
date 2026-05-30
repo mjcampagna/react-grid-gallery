@@ -6,12 +6,21 @@ export function computeGridLayout<T>(
   cellWidth: number,
   cellHeight: number,
 ): GridLayoutRow<T>[] {
-  if (items.length === 0 || columns <= 0 || cellWidth <= 0) return []
+  if (
+    items.length === 0 ||
+    !Number.isFinite(columns) ||
+    !Number.isFinite(cellWidth) ||
+    !Number.isFinite(cellHeight) ||
+    columns <= 0 ||
+    cellWidth <= 0 ||
+    cellHeight < 0
+  ) return []
 
+  const columnCount = Math.max(1, Math.floor(columns))
   const rows: GridLayoutRow<T>[] = []
-  for (let i = 0; i < items.length; i += columns) {
+  for (let i = 0; i < items.length; i += columnCount) {
     rows.push({
-      items: items.slice(i, i + columns),
+      items: items.slice(i, i + columnCount),
       width: cellWidth,
       height: cellHeight,
     })

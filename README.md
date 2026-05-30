@@ -18,7 +18,7 @@ React photo gallery with a fixed-column grid layout. Cells have a uniform size d
 ## Installation
 
 ```bash
-npm install @slithy/react-grid-gallery
+pnpm add @slithy/react-grid-gallery
 ```
 
 **Peer dependencies:** `react@^17 || ^18 || ^19`

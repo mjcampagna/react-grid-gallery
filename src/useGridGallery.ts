@@ -12,6 +12,14 @@ type VirtualWindow = {
   bottomSpacerHeight: number
 }
 
+function finitePositive(value: number, fallback: number): number {
+  return Number.isFinite(value) && value > 0 ? value : fallback
+}
+
+function finiteNonNegative(value: number, fallback = 0): number {
+  return Number.isFinite(value) && value >= 0 ? value : fallback
+}
+
 export function useGridGallery<T>(
   items: GalleryItem<T>[],
   options: GridOptions,
@@ -68,18 +76,19 @@ export function useGridGallery<T>(
 
   // ─── Layout ────────────────────────────────────────────────────────────────
 
+  const rawColumns = typeof options.columns === 'function' ? options.columns(containerWidth) : options.columns
   const resolvedColumns = Math.max(
     1,
-    Math.round(typeof options.columns === 'function' ? options.columns(containerWidth) : options.columns),
+    Math.round(finitePositive(rawColumns, 1)),
   )
-  const resolvedGap =
-    typeof options.gap === 'function' ? options.gap(containerWidth) : (options.gap ?? 0)
-  const resolvedAspectRatio =
-    typeof options.aspectRatio === 'function' ? options.aspectRatio(containerWidth) : (options.aspectRatio ?? 1)
+  const rawGap = typeof options.gap === 'function' ? options.gap(containerWidth) : (options.gap ?? 0)
+  const resolvedGap = finiteNonNegative(rawGap)
+  const rawAspectRatio = typeof options.aspectRatio === 'function' ? options.aspectRatio(containerWidth) : (options.aspectRatio ?? 1)
+  const resolvedAspectRatio = finitePositive(rawAspectRatio, 1)
 
   const cellWidth =
     containerWidth > 0
-      ? Math.floor((containerWidth - resolvedGap * (resolvedColumns - 1)) / resolvedColumns)
+      ? Math.max(0, Math.floor((containerWidth - resolvedGap * (resolvedColumns - 1)) / resolvedColumns))
       : 0
   const cellHeight = cellWidth > 0 ? Math.round(cellWidth / resolvedAspectRatio) : 0
 
