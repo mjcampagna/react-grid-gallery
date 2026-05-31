@@ -93,7 +93,7 @@ import { GridGallery } from '@slithy/react-grid-gallery'
 
 ## Virtualization
 
-Enable `virtualize` to keep the DOM small for large collections. Only rows within the viewport (plus `overscan`) are rendered; spacer divs above and below maintain the full scroll height.
+Enable `virtualize` to keep the DOM and render work small for large collections. Only rows within the viewport (plus `overscan`) are materialized; spacer divs above and below maintain the full scroll height.
 
 ```tsx
 <GridGallery
@@ -189,7 +189,7 @@ The hook underlying `<GridGallery>`. Use this directly for custom rendering or w
 ```ts
 import { useGridGallery } from '@slithy/react-grid-gallery'
 
-const { containerRef, rows, cellWidth, cellHeight, gap, columns, onLoad, onError, virtualWindow } =
+const { containerRef, rows, totalRows, cellWidth, cellHeight, gap, columns, onLoad, onError, virtualWindow } =
   useGridGallery(items, options, scrollContainerRef)
 ```
 
@@ -198,17 +198,20 @@ const { containerRef, rows, cellWidth, cellHeight, gap, columns, onLoad, onError
 | Property | Type | Description |
 |---|---|---|
 | `containerRef` | `RefObject<HTMLDivElement \| null>` | Attach to your container element to observe its width |
-| `rows` | `GridRow<T>[]` | Computed layout rows, each with `height` and `items` |
+| `rows` | `GridRow<T>[]` | Render rows. When `virtualize` is enabled, this contains only the visible/overscanned rows. |
+| `totalRows` | `number` | Total number of rows in the full grid, regardless of virtualization. Use this for ARIA row counts and full-grid metadata. |
 | `cellWidth` | `number` | Resolved cell width in pixels |
 | `cellHeight` | `number` | Resolved cell height in pixels |
 | `gap` | `number` | Resolved gap in pixels |
 | `columns` | `number` | Resolved column count |
 | `onLoad` | `(key: string \| number) => void` | Call when an image loads to mark it loaded |
 | `onError` | `(key: string \| number) => void` | Call when an image fails to load |
-| `virtualWindow` | `{ firstIndex, lastIndex, topSpacerHeight, bottomSpacerHeight } \| null` | Set when `virtualize` is true |
+| `virtualWindow` | `{ firstIndex, lastIndex, topSpacerHeight, bottomSpacerHeight } \| null` | Rendered row window and spacer heights when `virtualize` is true |
 | `focusedIndex` | `number` | Currently focused item index. Reflects `options.focusedIndex` when controlled. |
 | `handleItemFocus` | `(index: number) => void` | Pass to each cell's `onFocus` handler to sync focus state |
 | `handleItemKeyDown` | `(itemIndex: number, e: React.KeyboardEvent) => void` | Pass to each cell's `onKeyDown` handler to enable keyboard navigation |
+
+`GridRow<T>` includes `rowIndex`, `startIndex`, `height`, and `items`. Each item entry includes the original `item`, `itemIndex`, `colIndex`, `width`, `height`, and `loaded`.
 
 ---
 

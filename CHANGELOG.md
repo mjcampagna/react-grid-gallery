@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-05-30
+
+### Breaking
+
+- `useGridGallery().rows` now returns render rows when virtualization is enabled, rather than all layout rows.
+- `GridRow<T>` now includes `rowIndex` and `startIndex`; row item entries now include `itemIndex` and `colIndex`.
+
+### Added
+
+- `useGridGallery()` now returns `totalRows` as the full grid row count, regardless of virtualization.
+
+### Performance
+
+- Virtualized grids now materialize only the visible/overscanned row window instead of computing every row and slicing afterward.
+- Image load state updates now rebuild only render-window rows in virtualized mode.
+
 ## 2026-05-29
 
 ### Added

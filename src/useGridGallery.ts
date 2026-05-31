@@ -27,6 +27,7 @@ export function useGridGallery<T>(
 ): {
   containerRef: RefObject<HTMLDivElement | null>
   rows: GridRow<T>[]
+  totalRows: number
   cellWidth: number
   cellHeight: number
   gap: number
@@ -46,7 +47,7 @@ export function useGridGallery<T>(
   const pendingFocusRef = useRef<number | null>(null)
 
   const loadedSet = useRef<Set<string | number>>(new Set())
-  const [loadedVersion, setLoadedVersion] = useState(0)
+  const [loadedTick, setLoadedTick] = useState(0)
 
   const virtualRange = useVirtualWindow(containerRef, options.virtualize === true, scrollContainerRef)
 
@@ -67,7 +68,7 @@ export function useGridGallery<T>(
   const onLoad = useCallback((key: string | number) => {
     if (!loadedSet.current.has(key)) {
       loadedSet.current.add(key)
-      setLoadedVersion(v => v + 1)
+      setLoadedTick(v => v + 1)
     }
   }, [])
 
@@ -91,39 +92,26 @@ export function useGridGallery<T>(
       ? Math.max(0, Math.floor((containerWidth - resolvedGap * (resolvedColumns - 1)) / resolvedColumns))
       : 0
   const cellHeight = cellWidth > 0 ? Math.round(cellWidth / resolvedAspectRatio) : 0
-
-  const rows = useMemo(() => {
-    if (cellWidth === 0) return []
-    const layoutRows = computeGridLayout(items, resolvedColumns, cellWidth, cellHeight)
-    return layoutRows.map(row => ({
-      height: row.height,
-      items: row.items.map(item => ({
-        item,
-        width: row.width,
-        height: row.height,
-        loaded: loadedSet.current.has(item.key),
-      })),
-    }))
-  }, [items, resolvedColumns, cellWidth, cellHeight, loadedVersion])
+  const hasLayout = cellWidth > 0 && cellHeight >= 0 && items.length > 0
+  const totalRows = hasLayout ? Math.ceil(items.length / resolvedColumns) : 0
 
   // ─── Virtual window ────────────────────────────────────────────────────────
 
   const rowStride = cellHeight + resolvedGap
   let virtualWindow: VirtualWindow | null = null
 
-  if (options.virtualize && virtualRange !== null && rows.length > 0) {
-    const totalRows = rows.length
+  if (options.virtualize && virtualRange !== null && totalRows > 0 && rowStride > 0) {
     const overscan = options.overscan ?? cellHeight * 4
     const visibleTop = virtualRange.top - overscan
     const visibleBottom = virtualRange.bottom + overscan
 
     // All rows have uniform height — compute range directly without scanning
-    let firstIndex = Math.max(0, Math.floor(visibleTop / rowStride))
-    let lastIndex = Math.min(totalRows - 1, Math.ceil(visibleBottom / rowStride) - 1)
+    const maxRowIndex = totalRows - 1
+    const firstIndex = Math.min(maxRowIndex, Math.max(0, Math.floor(visibleTop / rowStride)))
+    let lastIndex = Math.min(maxRowIndex, Math.max(0, Math.ceil(visibleBottom / rowStride) - 1))
 
     if (firstIndex > lastIndex) {
-      firstIndex = 0
-      lastIndex = totalRows - 1
+      lastIndex = firstIndex
     }
 
     const topSpacerHeight = firstIndex * rowStride
@@ -131,6 +119,54 @@ export function useGridGallery<T>(
 
     virtualWindow = { firstIndex, lastIndex, topSpacerHeight, bottomSpacerHeight }
   }
+
+  const rows = useMemo(() => {
+    if (!hasLayout) return []
+
+    if (!options.virtualize) {
+      const layoutRows = computeGridLayout(items, resolvedColumns, cellWidth, cellHeight)
+      return layoutRows.map((row, rowIndex) => {
+        const startIndex = rowIndex * resolvedColumns
+        return {
+          rowIndex,
+          startIndex,
+          height: row.height,
+          items: row.items.map((item, colIndex) => ({
+            item,
+            itemIndex: startIndex + colIndex,
+            colIndex,
+            width: row.width,
+            height: row.height,
+            loaded: loadedSet.current.has(item.key),
+          })),
+        }
+      })
+    }
+
+    if (virtualWindow === null) return []
+
+    const renderRows: GridRow<T>[] = []
+    for (let rowIndex = virtualWindow.firstIndex; rowIndex <= virtualWindow.lastIndex; rowIndex++) {
+      const startIndex = rowIndex * resolvedColumns
+      const endIndex = Math.min(startIndex + resolvedColumns, items.length)
+      const rowItems = items.slice(startIndex, endIndex)
+      renderRows.push({
+        rowIndex,
+        startIndex,
+        height: cellHeight,
+        items: rowItems.map((item, colIndex) => ({
+          item,
+          itemIndex: startIndex + colIndex,
+          colIndex,
+          width: cellWidth,
+          height: cellHeight,
+          loaded: loadedSet.current.has(item.key),
+        })),
+      })
+    }
+
+    return renderRows
+  }, [cellHeight, cellWidth, hasLayout, items, options.virtualize, resolvedColumns, virtualWindow, loadedTick])
 
   // ─── Navigation ────────────────────────────────────────────────────────────
 
@@ -235,6 +271,7 @@ export function useGridGallery<T>(
   return {
     containerRef,
     rows,
+    totalRows,
     cellWidth,
     cellHeight,
     gap: resolvedGap,

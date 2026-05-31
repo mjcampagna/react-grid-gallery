@@ -14,15 +14,11 @@ type Props<T> = {
 } & GridOptions
 
 export function GridGallery<T>({ items, renderItem, scrollContainerRef, ...options }: Props<T>): ReactNode {
-  const { containerRef, rows, cellHeight, gap, columns, onLoad, onError, virtualWindow, focusedIndex, handleItemFocus, handleItemKeyDown } = useGridGallery(
+  const { containerRef, rows, totalRows, cellHeight, gap, columns, onLoad, onError, virtualWindow, focusedIndex, handleItemFocus, handleItemKeyDown } = useGridGallery(
     items,
     options,
     scrollContainerRef,
   )
-
-  const firstIndex = virtualWindow?.firstIndex ?? 0
-  const lastIndex = virtualWindow?.lastIndex ?? rows.length - 1
-  const visibleRows = virtualWindow ? rows.slice(firstIndex, lastIndex + 1) : rows
 
   const padding = options.padding ?? 0
   const navigable = options.navigable === true
@@ -31,21 +27,19 @@ export function GridGallery<T>({ items, renderItem, scrollContainerRef, ...optio
     <div
       ref={containerRef}
       style={{ display: 'flex', flexDirection: 'column', gap: `${gap}px`, padding: padding > 0 ? `${padding}px` : undefined }}
-      {...(navigable ? { role: 'grid', 'aria-rowcount': rows.length, 'aria-colcount': columns } : {})}
+      {...(navigable ? { role: 'grid', 'aria-rowcount': totalRows, 'aria-colcount': columns } : {})}
     >
       {virtualWindow && virtualWindow.topSpacerHeight > 0 && (
         <div style={{ height: virtualWindow.topSpacerHeight, contain: 'layout' }} />
       )}
-      {visibleRows.map((row, i) => {
-        const rowIndex = firstIndex + i
+      {rows.map(row => {
         return (
           <div
-            key={rowIndex}
+            key={row.rowIndex}
             style={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: `${gap}px`, contain: 'layout' }}
-            {...(navigable ? { role: 'row', 'aria-rowindex': rowIndex + 1 } : {})}
+            {...(navigable ? { role: 'row', 'aria-rowindex': row.rowIndex + 1 } : {})}
           >
-            {row.items.map(({ item, loaded }, colIdx) => {
-              const itemIndex = rowIndex * columns + colIdx
+            {row.items.map(({ item, itemIndex, colIndex, loaded }) => {
               const focused = navigable && focusedIndex === itemIndex
               return (
                 <div
@@ -53,7 +47,7 @@ export function GridGallery<T>({ items, renderItem, scrollContainerRef, ...optio
                   style={{ height: `${cellHeight}px` }}
                   {...(navigable ? {
                     role: 'gridcell',
-                    'aria-colindex': colIdx + 1,
+                    'aria-colindex': colIndex + 1,
                     tabIndex: focused ? 0 : -1,
                     'data-grid-index': itemIndex,
                     onKeyDown: (e) => handleItemKeyDown(itemIndex, e),

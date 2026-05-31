@@ -26,8 +26,12 @@ export type GridLayoutRow<T> = {
 }
 
 export type GridRow<T> = {
+  rowIndex: number
+  startIndex: number
   items: Array<{
     item: GalleryItem<T>
+    itemIndex: number
+    colIndex: number
     width: number
     height: number
     loaded: boolean
