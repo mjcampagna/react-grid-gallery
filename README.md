@@ -122,6 +122,64 @@ const scrollRef = useRef<HTMLDivElement>(null)
 
 ---
 
+## Consumer performance guide
+
+The gallery can only skip work when the inputs it receives are stable. For large collections, keep the array passed to `items` stable across unrelated parent renders:
+
+```tsx
+const items = useMemo(
+  () => photos.map(photo => ({ key: photo.id, ...photo })),
+  [photos],
+)
+
+<GridGallery items={items} columns={4} virtualize renderItem={renderPhoto} />
+```
+
+The same applies to responsive option callbacks. Define them outside the component or memoize them with `useCallback` so the gallery is not handed new function identities on every render:
+
+```tsx
+const columns = useCallback((width: number) => (width < 700 ? 2 : 4), [])
+
+<GridGallery items={items} columns={columns} virtualize renderItem={renderPhoto} />
+```
+
+When `virtualize` is enabled, `renderItem` is called for the currently rendered window as scrolling changes. If your item UI is expensive, render a memoized item component and compare primitive layout values instead of the layout object reference:
+
+```tsx
+type PhotoProps = {
+  item: PhotoItem
+  loaded: boolean
+  onLoad: React.ReactEventHandler<HTMLImageElement>
+}
+
+const Photo = React.memo(
+  ({ item, loaded, onLoad }: PhotoProps) => (
+    <img
+      src={item.src}
+      alt={item.alt}
+      loading="lazy"
+      decoding="async"
+      onLoad={onLoad}
+      style={{ opacity: loaded ? 1 : 0 }}
+    />
+  ),
+  (prev, next) => prev.item === next.item && prev.loaded === next.loaded && prev.onLoad === next.onLoad,
+)
+
+const renderPhoto = useCallback(
+  (item: PhotoItem, { loaded }, handlers) => (
+    <Photo item={item} loaded={loaded} onLoad={handlers.onLoad} />
+  ),
+  [],
+)
+```
+
+Prefer deriving gallery data from state during render (`useMemo`) over syncing a second item array in an effect. Use stable item keys that do not change when sorting or filtering. For image-heavy grids, pass `loading="lazy"` and `decoding="async"` to your `<img>` elements; virtualization limits mounted DOM, while browser image loading still determines when network and decode work begins.
+
+If you consume `useGridGallery` directly, remember that `rows` means "render rows" when `virtualize` is enabled. Use `totalRows`, `row.rowIndex`, and item `itemIndex` / `colIndex` for ARIA metadata, scroll math, analytics, and any UI that needs full-grid indices.
+
+---
+
 ## Keyboard navigation
 
 Enable with `navigable`. Arrow keys move focus through the grid; Space/Enter activate the focused item.
