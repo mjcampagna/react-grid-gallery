@@ -178,20 +178,24 @@ export function useGridGallery<T>(
     const rowBottom = rowTop + cellHeight
     const scrollEl = resolveScrollEl(scrollContainerRef)
     if (scrollEl) {
-      if (rowTop < scrollEl.scrollTop) {
-        scrollEl.scrollTop = rowTop
-      } else if (rowBottom > scrollEl.scrollTop + scrollEl.clientHeight) {
-        scrollEl.scrollTop = rowBottom - scrollEl.clientHeight
+      const visibleTop = scrollEl.scrollTop + padding
+      const visibleBottom = scrollEl.scrollTop + scrollEl.clientHeight - padding
+      if (rowTop < visibleTop) {
+        scrollEl.scrollTop = rowTop - padding
+      } else if (rowBottom > visibleBottom) {
+        scrollEl.scrollTop = rowBottom - scrollEl.clientHeight + padding
       }
     } else {
       const containerEl = containerRef.current
       if (!containerEl) return
       const absTop = containerEl.getBoundingClientRect().top + window.scrollY + rowTop
       const absBottom = absTop + cellHeight
-      if (absTop < window.scrollY) {
-        window.scrollTo({ top: absTop })
-      } else if (absBottom > window.scrollY + window.innerHeight) {
-        window.scrollTo({ top: absBottom - window.innerHeight })
+      const visibleTop = window.scrollY + padding
+      const visibleBottom = window.scrollY + window.innerHeight - padding
+      if (absTop < visibleTop) {
+        window.scrollTo({ top: absTop - padding })
+      } else if (absBottom > visibleBottom) {
+        window.scrollTo({ top: absBottom - window.innerHeight + padding })
       }
     }
   }

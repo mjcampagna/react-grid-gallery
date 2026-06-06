@@ -74,9 +74,15 @@ function setVirtualRects(scrollEl: HTMLElement, gridEl: HTMLElement): void {
   })
 }
 
-function VirtualHookHarness({ onValue }: { onValue: (value: HookState) => void }) {
+function VirtualHookHarness({
+  onValue,
+  options = { columns: 5, virtualize: true, overscan: 0 },
+}: {
+  onValue: (value: HookState) => void
+  options?: GridOptions
+}) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const value = useGridGallery(MANY_ITEMS, { columns: 5, virtualize: true, overscan: 0 }, scrollRef)
+  const value = useGridGallery(MANY_ITEMS, options, scrollRef)
   onValue(value)
   return createElement(
     'div',
@@ -350,6 +356,25 @@ describe('handleItemKeyDown', () => {
 
     act(() => { result.current.handleItemKeyDown(5, key('Enter', { shiftKey: false })) })
     expect(onActivate).toHaveBeenCalledWith(5, false)
+  })
+
+  it('scrolls offscreen virtual rows into the padded viewport', () => {
+    let latest: HookState | null = null
+    render(createElement(VirtualHookHarness, {
+      onValue: value => { latest = value },
+      options: { columns: 5, gap: 4, padding: 4, virtualize: true, overscan: 0, navigable: true },
+    }))
+
+    const scrollEl = screen.getByTestId('scroll')
+    const gridEl = screen.getByTestId('grid')
+    defineReadonlyNumber(scrollEl, 'clientHeight', 108)
+    setVirtualRects(scrollEl, gridEl)
+
+    fireResize(520)
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+    act(() => { getLatest(latest).handleItemKeyDown(0, key('End', { ctrlKey: true })) })
+
+    expect(scrollEl.scrollTop).toBe(1976)
   })
 })
 
