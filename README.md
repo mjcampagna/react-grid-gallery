@@ -10,6 +10,7 @@ React photo gallery with a fixed-column grid layout. Cells have a uniform size d
 - **`loaded` state** — track browser image load state per item for fade-in effects
 - **Keyboard navigation** — opt-in `navigable` prop; full arrow key and Home/End navigation with ARIA grid semantics
 - **Controlled focus** — `focusedIndex` prop lets external state own the roving tabindex seat
+- **Render metrics** — opt-in `onRenderMetricsChange` callback reports mounted vs. total row counts on each render cycle
 - **Three-layer API** — use the full component, the hook, or the pure layout function depending on how much control you need
 - ESM only · zero runtime dependencies · `sideEffects: false`
 
@@ -78,6 +79,7 @@ import { GridGallery } from '@slithy/react-grid-gallery'
 | `focusedIndex` | `number` | — | Controlled focused index. When provided, suppresses internal focus state — the prop owns the roving tabindex seat. |
 | `onFocusedIndexChange` | `(index: number) => void` | — | Fired when navigation would change the focused index. Only needed when using `focusedIndex` and want to sync external state. |
 | `onActivate` | `(index: number, shiftKey: boolean) => void` | — | Fired when Space or Enter is pressed on a focused cell |
+| `onRenderMetricsChange` | `(metrics: GridRenderMetrics) => void` | — | Fired whenever the rendered row window changes. Should be stable (e.g. `useCallback`). See `GridRenderMetrics`. |
 
 **`renderItem` arguments:**
 
@@ -237,6 +239,38 @@ type GalleryItem<T> = T & {
   key: string | number
 }
 ```
+
+---
+
+## `GridRenderMetrics`
+
+Passed to `onRenderMetricsChange` whenever the rendered row window changes.
+
+```ts
+type GridRenderMetrics = {
+  virtualized: boolean
+  mountedItemCount: number
+  mountedRowCount: number
+  totalItemCount: number
+  totalRowCount: number
+  firstMountedRowIndex: number | null
+  lastMountedRowIndex: number | null
+}
+```
+
+| Field | Description |
+|---|---|
+| `virtualized` | Whether `virtualize` is enabled |
+| `mountedItemCount` | Number of items currently in the DOM |
+| `mountedRowCount` | Number of rows currently in the DOM |
+| `totalItemCount` | Total items across the full grid |
+| `totalRowCount` | Total rows across the full grid |
+| `firstMountedRowIndex` | Row index of the first mounted row (`null` if no rows) |
+| `lastMountedRowIndex` | Row index of the last mounted row (`null` if no rows) |
+
+When `virtualize` is disabled, `mountedItemCount === totalItemCount` and `mountedRowCount === totalRowCount`.
+
+`onRenderMetricsChange` should be stable — wrap it in `useCallback` to avoid spurious fires when the parent re-renders.
 
 ---
 

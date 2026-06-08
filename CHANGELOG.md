@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-08
+
+### Added
+
+- `onRenderMetricsChange?: (metrics: GridRenderMetrics) => void` — optional callback fired whenever the rendered row window changes. Reports `virtualized`, `mountedItemCount`, `mountedRowCount`, `totalItemCount`, `totalRowCount`, `firstMountedRowIndex`, and `lastMountedRowIndex`. Useful for analytics, debugging, and scroll progress indicators. Should be stable (e.g. `useCallback`) to avoid spurious fires.
+- `GridRenderMetrics` type is now exported from the package.
+
 ## 2026-05-30
 
 ### Breaking

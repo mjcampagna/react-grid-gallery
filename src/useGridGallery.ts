@@ -3,7 +3,7 @@ import type React from 'react'
 
 import { computeGridLayout } from './computeGridLayout'
 import { useVirtualWindow, resolveScrollEl } from './useVirtualWindow'
-import type { GalleryItem, GridOptions, GridRow, ScrollContainerRef } from './types'
+import type { GalleryItem, GridOptions, GridRenderMetrics, GridRow, ScrollContainerRef } from './types'
 
 type VirtualWindow = {
   firstIndex: number
@@ -18,6 +18,23 @@ function finitePositive(value: number, fallback: number): number {
 
 function finiteNonNegative(value: number, fallback = 0): number {
   return Number.isFinite(value) && value >= 0 ? value : fallback
+}
+
+function buildRenderMetrics<T>(
+  rows: GridRow<T>[],
+  totalItemCount: number,
+  totalRowCount: number,
+  virtualized: boolean,
+): GridRenderMetrics {
+  return {
+    virtualized,
+    mountedItemCount: rows.reduce((sum, row) => sum + row.items.length, 0),
+    mountedRowCount: rows.length,
+    totalItemCount,
+    totalRowCount,
+    firstMountedRowIndex: rows[0]?.rowIndex ?? null,
+    lastMountedRowIndex: rows.at(-1)?.rowIndex ?? null,
+  }
 }
 
 export function useGridGallery<T>(
@@ -266,6 +283,15 @@ export function useGridGallery<T>(
   })
 
   const effectiveFocusedIndex = isControlled ? options.focusedIndex! : focusedIndex
+
+  const renderMetrics = useMemo(
+    () => buildRenderMetrics(rows, items.length, totalRows, options.virtualize === true),
+    [items.length, options.virtualize, rows, totalRows],
+  )
+
+  useEffect(() => {
+    options.onRenderMetricsChange?.(renderMetrics)
+  }, [options.onRenderMetricsChange, renderMetrics])
 
   function handleItemFocus(index: number): void {
     if (!isControlled) setFocusedIndex(index)

@@ -202,6 +202,32 @@ describe('layout', () => {
     expect(state.rows).toHaveLength(2)
     expect(state.rows.flatMap(row => row.items.map(entry => entry.item.key))).not.toContain('99')
   })
+  it('reports mounted render metrics for virtualized rows', () => {
+    const onRenderMetricsChange = vi.fn()
+
+    render(createElement(VirtualHookHarness, {
+      onValue: () => {},
+      options: { columns: 5, virtualize: true, overscan: 0, onRenderMetricsChange },
+    }))
+
+    const scrollEl = screen.getByTestId('scroll')
+    const gridEl = screen.getByTestId('grid')
+    defineReadonlyNumber(scrollEl, 'clientHeight', 200)
+    setVirtualRects(scrollEl, gridEl)
+
+    fireResize(500)
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    expect(onRenderMetricsChange).toHaveBeenLastCalledWith({
+      virtualized: true,
+      mountedItemCount: 10,
+      mountedRowCount: 2,
+      totalItemCount: 100,
+      totalRowCount: 20,
+      firstMountedRowIndex: 0,
+      lastMountedRowIndex: 1,
+    })
+  })
 })
 
 // ─── Component Rendering ─────────────────────────────────────────────────────
