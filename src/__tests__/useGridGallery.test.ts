@@ -1,5 +1,5 @@
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react'
-import { createElement, memo, useRef } from 'react'
+import { StrictMode, createElement, memo, useRef } from 'react'
 
 import { GridGallery } from '../GridGallery'
 import { useGridGallery } from '../useGridGallery'
@@ -7,24 +7,67 @@ import type { GalleryItem, GridOptions } from '../types'
 
 // ─── ResizeObserver mock ──────────────────────────────────────────────────────
 //
-// The hook attaches ResizeObserver inside a useEffect, gated on containerRef
-// having a DOM element. In renderHook there's no real DOM so observe() is never
-// called — we capture the callback in the constructor so tests can fire resize
-// events directly.
+// The hook attaches ResizeObserver inside useEffect. These tests need to trigger
+// both generic width updates and target-specific resize invalidation, so the mock
+// tracks observed elements and lets us fire callbacks manually.
+
+type ResizeObserverRecord = {
+  callback: ResizeObserverCallback
+  instance: ResizeObserver
+  observed: Set<Element>
+}
 
 let fireResize: (width: number) => void = () => {}
+let fireElementResize: (element: Element, size?: { width?: number; height?: number }) => void = () => {}
 
 beforeEach(() => {
+  const resizeObserverRecords: ResizeObserverRecord[] = []
+
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { cb(0); return 0 })
   vi.stubGlobal('cancelAnimationFrame', vi.fn())
   vi.stubGlobal('ResizeObserver', class {
+    private readonly observed = new Set<Element>()
+
     constructor(cb: ResizeObserverCallback) {
-      fireResize = (width: number) =>
-        act(() => { cb([{ contentRect: { width } } as ResizeObserverEntry], this as unknown as ResizeObserver) })
+      resizeObserverRecords.push({
+        callback: cb,
+        instance: this as unknown as ResizeObserver,
+        observed: this.observed,
+      })
     }
-    observe() {}
+    observe(element: Element) {
+      this.observed.add(element)
+    }
     disconnect() {}
   })
+
+  fireResize = (width: number) =>
+    act(() => {
+      resizeObserverRecords.forEach(record => {
+        record.callback(
+          [{ contentRect: { width } } as ResizeObserverEntry],
+          record.instance,
+        )
+      })
+    })
+
+  fireElementResize = (element: Element, size = {}) =>
+    act(() => {
+      resizeObserverRecords
+        .filter(record => record.observed.has(element))
+        .forEach(record => {
+          record.callback(
+            [{
+              contentRect: {
+                height: size.height ?? 0,
+                width: size.width ?? 0,
+              },
+              target: element,
+            } as ResizeObserverEntry],
+            record.instance,
+          )
+        })
+    })
 })
 
 afterEach(() => {
@@ -49,27 +92,53 @@ function defineReadonlyNumber(el: HTMLElement, key: 'clientHeight', value: numbe
   Object.defineProperty(el, key, { configurable: true, value })
 }
 
-function setVirtualRects(scrollEl: HTMLElement, gridEl: HTMLElement): void {
+function setVirtualRects(
+  scrollEl: HTMLElement,
+  gridEl: HTMLElement,
+  {
+    gridHeight = 2000,
+    gridTop = () => -scrollEl.scrollTop,
+    scrollHeight = 2000,
+    scrollTop = 0,
+    scrollViewportHeight = 200,
+    scrollViewportTop = 0,
+  }: {
+    gridHeight?: number
+    gridTop?: () => number
+    scrollHeight?: number
+    scrollTop?: number
+    scrollViewportHeight?: number
+    scrollViewportTop?: number
+  } = {},
+): void {
+  Object.defineProperty(scrollEl, 'scrollHeight', { configurable: true, value: scrollHeight })
+  let currentScrollTop = scrollTop
+  Object.defineProperty(scrollEl, 'scrollTop', {
+    configurable: true,
+    get: () => currentScrollTop,
+    set: value => { currentScrollTop = value },
+  })
+
   scrollEl.getBoundingClientRect = () => ({
-    bottom: 200,
-    height: 200,
+    bottom: scrollViewportTop + scrollViewportHeight,
+    height: scrollViewportHeight,
     left: 0,
     right: 500,
-    top: 0,
+    top: scrollViewportTop,
     width: 500,
     x: 0,
-    y: 0,
+    y: scrollViewportTop,
     toJSON: () => ({}),
   })
   gridEl.getBoundingClientRect = () => ({
-    bottom: 2000,
-    height: 2000,
+    bottom: gridTop() + gridHeight,
+    height: gridHeight,
     left: 0,
     right: 500,
-    top: -scrollEl.scrollTop,
+    top: gridTop(),
     width: 500,
     x: 0,
-    y: -scrollEl.scrollTop,
+    y: gridTop(),
     toJSON: () => ({}),
   })
 }
@@ -189,6 +258,28 @@ describe('layout', () => {
     expect(state.rows[1].items.map(entry => entry.itemIndex)).toEqual([5, 6, 7, 8, 9])
   })
 
+  it('updates visible rows when scrolling deeper into the virtual window', () => {
+    let latest: HookState | null = null
+
+    render(createElement(VirtualHookHarness, { onValue: value => { latest = value } }))
+
+    const scrollEl = screen.getByTestId('scroll')
+    const gridEl = screen.getByTestId('grid')
+    defineReadonlyNumber(scrollEl, 'clientHeight', 200)
+    setVirtualRects(scrollEl, gridEl)
+
+    fireResize(500)
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    scrollEl.scrollTop = 500
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    const state = getLatest(latest)
+    expect(state.rows).toHaveLength(2)
+    expect(state.rows.map(row => row.rowIndex)).toEqual([5, 6])
+    expect(state.rows[0].items.map(entry => entry.itemIndex)).toEqual([25, 26, 27, 28, 29])
+  })
+
   it('keeps virtualized rows limited after offscreen loads', () => {
     let latest: HookState | null = null
     render(createElement(VirtualHookHarness, { onValue: value => { latest = value } }))
@@ -207,6 +298,87 @@ describe('layout', () => {
     expect(state.rows.flatMap(row => row.items.map(entry => entry.item.key))).not.toContain('99')
   })
 
+  it('recomputes the virtual window when the scroll viewport resizes', () => {
+    let latest: HookState | null = null
+
+    render(createElement(VirtualHookHarness, { onValue: value => { latest = value } }))
+
+    const scrollEl = screen.getByTestId('scroll')
+    const gridEl = screen.getByTestId('grid')
+    defineReadonlyNumber(scrollEl, 'clientHeight', 200)
+    setVirtualRects(scrollEl, gridEl, {
+      scrollViewportHeight: 200,
+    })
+
+    fireResize(500)
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    expect(getLatest(latest).rows).toHaveLength(2)
+
+    defineReadonlyNumber(scrollEl, 'clientHeight', 300)
+    setVirtualRects(scrollEl, gridEl, {
+      scrollViewportHeight: 300,
+    })
+    fireElementResize(scrollEl, { height: 300, width: 500 })
+
+    const state = getLatest(latest)
+    expect(state.rows).toHaveLength(3)
+    expect(state.rows.map(row => row.rowIndex)).toEqual([0, 1, 2])
+  })
+
+  it('recomputes the virtual window when the gallery offset shifts after layout changes', () => {
+    let latest: HookState | null = null
+    let currentGridTop = 0
+
+    render(createElement(VirtualHookHarness, { onValue: value => { latest = value } }))
+
+    const scrollEl = screen.getByTestId('scroll')
+    const gridEl = screen.getByTestId('grid')
+    defineReadonlyNumber(scrollEl, 'clientHeight', 200)
+    setVirtualRects(scrollEl, gridEl, {
+      gridTop: () => currentGridTop,
+    })
+
+    fireResize(500)
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    expect(getLatest(latest).rows.map(row => row.rowIndex)).toEqual([0, 1])
+
+    currentGridTop = -500
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    const state = getLatest(latest)
+    expect(state.rows).toHaveLength(2)
+    expect(state.rows.map(row => row.rowIndex)).toEqual([5, 6])
+    expect(state.rows[0].items.map(entry => entry.itemIndex)).toEqual([25, 26, 27, 28, 29])
+  })
+
+  it('keeps rendering one row when cells are taller than the viewport', () => {
+    let latest: HookState | null = null
+
+    render(createElement(VirtualHookHarness, {
+      onValue: value => { latest = value },
+      options: { columns: 1, virtualize: true, overscan: 0, aspectRatio: 0.5 },
+    }))
+
+    const scrollEl = screen.getByTestId('scroll')
+    const gridEl = screen.getByTestId('grid')
+    defineReadonlyNumber(scrollEl, 'clientHeight', 200)
+    setVirtualRects(scrollEl, gridEl, {
+      gridHeight: 80000,
+      scrollViewportHeight: 200,
+    })
+
+    fireResize(400)
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    const state = getLatest(latest)
+    expect(state.cellHeight).toBe(800)
+    expect(state.rows).toHaveLength(1)
+    expect(state.rows[0]?.rowIndex).toBe(0)
+    expect(state.rows[0]?.items.map(entry => entry.itemIndex)).toEqual([0])
+  })
+
   it('returns stable image props for unaffected items across load updates', () => {
     const { result } = renderHook(() => useGridGallery(ITEMS, OPTIONS))
     fireResize(WIDTH)
@@ -218,6 +390,60 @@ describe('layout', () => {
     expect(result.current.getItemImageProps('0')).toBe(before)
     expect(result.current.getItemImageProps('0').onLoad).toBe(before.onLoad)
     expect(result.current.getItemImageProps('0').onError).toBe(before.onError)
+  })
+
+  it('prunes stale loaded state and preserves handler identity for unaffected keys', () => {
+    const firstItems = ['0', '1', '2'].map(item)
+    const secondItems = ['1', '3'].map(item)
+    const thirdItems = ['0', '1'].map(item)
+    const { result, rerender } = renderHook(
+      ({ items }) => useGridGallery(items, OPTIONS),
+      { initialProps: { items: firstItems } },
+    )
+
+    fireResize(WIDTH)
+
+    const initialHandlersForOne = result.current.getItemImageProps('1')
+
+    act(() => { result.current.onLoad('0') })
+    expect(result.current.rows[0]?.items[0]?.loaded).toBe(true)
+
+    rerender({ items: secondItems })
+
+    expect(result.current.getItemImageProps('1')).toBe(initialHandlersForOne)
+    expect(result.current.rows[0]?.items[0]?.item.key).toBe('1')
+    expect(result.current.rows[0]?.items[0]?.loaded).toBe(false)
+    expect(result.current.rows[0]?.items[1]?.item.key).toBe('3')
+
+    rerender({ items: thirdItems })
+
+    expect(result.current.rows[0]?.items[0]?.item.key).toBe('0')
+    expect(result.current.rows[0]?.items[0]?.loaded).toBe(false)
+    expect(result.current.getItemImageProps('1')).toBe(initialHandlersForOne)
+  })
+
+  it('reuses committed row identities under StrictMode load updates', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, OPTIONS), {
+      wrapper: ({ children }) => createElement(StrictMode, null, children),
+    })
+
+    fireResize(WIDTH)
+
+    const firstRowBefore = result.current.rows[0]
+    const secondRowBefore = result.current.rows[1]
+
+    act(() => { result.current.onLoad('0') })
+
+    expect(result.current.rows[0]).not.toBe(firstRowBefore)
+    expect(result.current.rows[1]).toBe(secondRowBefore)
+
+    const firstRowAfterLoad = result.current.rows[0]
+    const secondRowAfterLoad = result.current.rows[1]
+
+    act(() => { result.current.onLoad('0') })
+
+    expect(result.current.rows[0]).toBe(firstRowAfterLoad)
+    expect(result.current.rows[1]).toBe(secondRowAfterLoad)
   })
 
   it('reports mounted render metrics for virtualized rows', () => {

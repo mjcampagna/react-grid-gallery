@@ -31,44 +31,48 @@ export function useVirtualWindow(
   useEffect(() => {
     if (!enabled) return
 
-    const update = () => {
+    const publishRange = () => {
       const el = containerRef.current
       if (!el) return
-      const rect = el.getBoundingClientRect()
 
+      const rect = el.getBoundingClientRect()
       const sc = resolveScrollEl(scrollContainerRef)
+
       if (sc) {
         const scRect = sc.getBoundingClientRect()
-        const containerTop = 0 - (rect.top - scRect.top)
-        setRange({ top: containerTop, bottom: containerTop + sc.clientHeight })
-      } else {
-        const containerTop = 0 - rect.top
-        setRange({ top: containerTop, bottom: containerTop + window.innerHeight })
+        const top = sc.scrollTop - (rect.top - scRect.top + sc.scrollTop)
+        setRange({ top, bottom: top + sc.clientHeight })
+        return
       }
+
+      const top = window.scrollY - (rect.top + window.scrollY)
+      setRange({ top, bottom: top + window.innerHeight })
     }
 
-    const handleScroll = () => {
+    const scheduleUpdate = () => {
       if (rafIdRef.current !== null) cancelAnimationFrame(rafIdRef.current)
       rafIdRef.current = requestAnimationFrame(() => {
-        update()
+        publishRange()
         rafIdRef.current = null
       })
     }
 
-    update()
+    publishRange()
 
     const target = resolveScrollEl(scrollContainerRef) ?? window
-    target.addEventListener('scroll', handleScroll, { passive: true })
+    target.addEventListener('scroll', scheduleUpdate, { passive: true })
     if (target === window) {
-      window.addEventListener('resize', handleScroll, { passive: true })
+      window.addEventListener('resize', publishRange, { passive: true })
     }
 
-    const ro = new ResizeObserver(update)
+    const ro = new ResizeObserver(publishRange)
+    const containerEl = containerRef.current
+    if (containerEl) ro.observe(containerEl)
     if (target !== window) ro.observe(target as HTMLElement)
 
     return () => {
-      target.removeEventListener('scroll', handleScroll)
-      if (target === window) window.removeEventListener('resize', handleScroll)
+      target.removeEventListener('scroll', scheduleUpdate)
+      if (target === window) window.removeEventListener('resize', publishRange)
       if (rafIdRef.current !== null) cancelAnimationFrame(rafIdRef.current)
       ro.disconnect()
     }

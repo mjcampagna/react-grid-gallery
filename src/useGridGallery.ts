@@ -91,6 +91,17 @@ function rowsMatch<T>(left: GridRow<T>, right: BaseGridRow<T>): boolean {
   return true
 }
 
+function pruneMapEntries<T>(
+  map: Map<string | number, T>,
+  activeKeys: ReadonlySet<string | number>,
+): void {
+  for (const key of map.keys()) {
+    if (!activeKeys.has(key)) {
+      map.delete(key)
+    }
+  }
+}
+
 export function useGridGallery<T>(
   items: GalleryItem<T>[],
   options: GridOptions,
@@ -133,6 +144,8 @@ export function useGridGallery<T>(
 
   const virtualRange = useVirtualWindow(containerRef, virtualize, scrollContainerRef)
 
+  const itemKeys = useMemo(() => new Set(items.map(item => item.key)), [items])
+
   useEffect(() => {
     const observer = new ResizeObserver(entries => {
       const width = entries[0]?.contentRect.width ?? 0
@@ -142,6 +155,24 @@ export function useGridGallery<T>(
     if (el) observer.observe(el)
     return () => observer.disconnect()
   }, [])
+
+  useEffect(() => {
+    pruneMapEntries(imagePropsCacheRef.current, itemKeys)
+    setLoadedKeys(current => {
+      let changed = false
+      const next = new Set<string | number>()
+
+      for (const key of current) {
+        if (itemKeys.has(key)) {
+          next.add(key)
+        } else {
+          changed = true
+        }
+      }
+
+      return changed ? next : current
+    })
+  }, [itemKeys])
 
   const onLoad = useCallback((key: string | number) => {
     setLoadedKeys(current => {
@@ -249,12 +280,10 @@ export function useGridGallery<T>(
   ])
 
   const rows = useMemo(() => {
+    const previousRows = previousRowsRef.current
     if (baseRows.length === 0) {
-      previousRowsRef.current = []
       return []
     }
-
-    const previousRows = previousRowsRef.current
     let allRowsReused = previousRows.length === baseRows.length
 
     const nextRows = baseRows.map((baseRow, rowOffset) => {
@@ -301,9 +330,12 @@ export function useGridGallery<T>(
       return previousRows
     }
 
-    previousRowsRef.current = nextRows
     return nextRows
   }, [baseRows, loadedKeys])
+
+  useLayoutEffect(() => {
+    previousRowsRef.current = rows
+  }, [rows])
 
   const isControlled = controlledFocusedIndex !== undefined
 

@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
 
 import { useGridGallery } from './useGridGallery'
 import type {
@@ -30,10 +30,23 @@ type CellProps<T> = {
   navigable: boolean
   onItemFocus: (index: number) => void
   onItemKeyDown: (itemIndex: number, e: React.KeyboardEvent) => void
-  renderItem: RenderItem<T>
+  renderContent: () => ReactNode
+  renderItem: unknown
 }
 
-function GridGalleryCellInner<T>({
+type MemoCellProps = {
+  cellHeight: number
+  entry: GridRow<unknown>['items'][number]
+  focused: boolean
+  handlers: GridItemRenderHandlers
+  navigable: boolean
+  onItemFocus: (index: number) => void
+  onItemKeyDown: (itemIndex: number, e: React.KeyboardEvent) => void
+  renderContent: () => ReactNode
+  renderItem: unknown
+}
+
+function GridGalleryCellInner({
   cellHeight,
   entry,
   focused,
@@ -41,8 +54,8 @@ function GridGalleryCellInner<T>({
   navigable,
   onItemFocus,
   onItemKeyDown,
-  renderItem,
-}: CellProps<T>): ReactNode {
+  renderContent,
+}: MemoCellProps): ReactNode {
   return (
     <div
       style={{ height: `${cellHeight}px` }}
@@ -55,27 +68,42 @@ function GridGalleryCellInner<T>({
         onFocus: () => onItemFocus(entry.itemIndex),
       } : {})}
     >
-      {renderItem(
-        entry.item,
-        { loaded: entry.loaded, focused },
-        handlers,
-      )}
+      {renderContent()}
     </div>
   )
 }
 
-const GridGalleryCell = memo(
-  GridGalleryCellInner,
-  <T,>(prev: CellProps<T>, next: CellProps<T>) =>
-    prev.cellHeight === next.cellHeight &&
+function areCellPropsEqual(prev: MemoCellProps, next: MemoCellProps): boolean {
+  return prev.cellHeight === next.cellHeight &&
     prev.entry === next.entry &&
     prev.focused === next.focused &&
     prev.handlers === next.handlers &&
     prev.navigable === next.navigable &&
     prev.onItemFocus === next.onItemFocus &&
     prev.onItemKeyDown === next.onItemKeyDown &&
-    prev.renderItem === next.renderItem,
-) as <T>(props: CellProps<T>) => ReactNode
+    prev.renderItem === next.renderItem
+}
+
+const MemoGridGalleryCell = memo(
+  GridGalleryCellInner,
+  areCellPropsEqual,
+)
+
+function GridGalleryCell<T>(props: CellProps<T>): ReactNode {
+  return (
+    <MemoGridGalleryCell
+      cellHeight={props.cellHeight}
+      entry={props.entry}
+      focused={props.focused}
+      handlers={props.handlers}
+      navigable={props.navigable}
+      onItemFocus={props.onItemFocus}
+      onItemKeyDown={props.onItemKeyDown}
+      renderContent={props.renderContent}
+      renderItem={props.renderItem}
+    />
+  )
+}
 
 export function GridGallery<T>({ items, renderItem, scrollContainerRef, ...options }: Props<T>): ReactNode {
   const {
@@ -93,6 +121,15 @@ export function GridGallery<T>({ items, renderItem, scrollContainerRef, ...optio
   } = useGridGallery(items, options, scrollContainerRef)
 
   const renderHandlersCacheRef = useRef(new Map<string | number, GridItemRenderHandlers>())
+  const itemKeys = useMemo(() => new Set(items.map(item => item.key)), [items])
+
+  useEffect(() => {
+    for (const key of renderHandlersCacheRef.current.keys()) {
+      if (!itemKeys.has(key)) {
+        renderHandlersCacheRef.current.delete(key)
+      }
+    }
+  }, [itemKeys])
 
   const getItemRenderHandlers = useCallback((key: string | number): GridItemRenderHandlers => {
     const cached = renderHandlersCacheRef.current.get(key)
@@ -136,6 +173,11 @@ export function GridGallery<T>({ items, renderItem, scrollContainerRef, ...optio
               navigable={navigable}
               onItemFocus={handleItemFocus}
               onItemKeyDown={handleItemKeyDown}
+              renderContent={() => renderItem(
+                entry.item,
+                { loaded: entry.loaded, focused: navigable && focusedIndex === entry.itemIndex },
+                getItemRenderHandlers(entry.item.key),
+              )}
               renderItem={renderItem}
             />
           ))}
