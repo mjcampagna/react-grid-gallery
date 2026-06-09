@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.0 — 2026-06-09
+
+### Added
+
+- `getItemImageProps(key)` is now returned from `useGridGallery`, providing stable per-item `{ onLoad, onError }` props for consumers who manage their own rendering.
+- `GridItemLayout`, `GridItemImageProps`, and `GridItemRenderHandlers` types are now exported from the package.
+
+### Fixed
+
+- Virtualized galleries with cells taller than the scroll viewport no longer render blank.
+- Virtual window range recomputes correctly after layout shifts above the gallery (geometry is measured fresh on each scroll frame rather than cached).
+- Cache entries for `imagePropsCacheRef` and `renderHandlersCacheRef` are now pruned when items are removed, preventing unbounded memory growth in feeds that cycle through many unique keys. `loadedKeys` is similarly pruned — a key removed from `items` will reload when re-added.
+
+### Performance
+
+- Image load state is now isolated per item: calling `onLoad` triggers a rerender only in the affected cell, not the entire gallery. Implemented via `loadedKeys` state, a `rows` memo that preserves stable object references for unchanged items, and a memoized `GridGalleryCell` that bails out when its entry identity is unchanged.
+- `previousRowsRef` writes moved out of the `rows` memo into a `useLayoutEffect`, making row identity reuse safe under concurrent/interrupted renders.
+
 ## 2026-06-08
 
 ### Added
