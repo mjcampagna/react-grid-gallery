@@ -1,15 +1,41 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type React from 'react'
 
-import { computeGridLayout } from './computeGridLayout'
-import { useVirtualWindow, resolveScrollEl } from './useVirtualWindow'
-import type { GalleryItem, GridOptions, GridRenderMetrics, GridRow, ScrollContainerRef } from './types'
+import { resolveScrollEl, useVirtualWindow } from './useVirtualWindow'
+import type {
+  GalleryItem,
+  GridItemImageProps,
+  GridOptions,
+  GridRenderMetrics,
+  GridRow,
+  ScrollContainerRef,
+} from './types'
 
 type VirtualWindow = {
   firstIndex: number
   lastIndex: number
   topSpacerHeight: number
   bottomSpacerHeight: number
+}
+
+type BaseGridItem<T> = {
+  item: GalleryItem<T>
+  itemIndex: number
+  colIndex: number
+  width: number
+  height: number
+}
+
+type BaseGridRow<T> = {
+  rowIndex: number
+  startIndex: number
+  items: BaseGridItem<T>[]
+  height: number
+}
+
+type RenderMetricsRow = {
+  rowIndex: number
+  items: Array<unknown>
 }
 
 function finitePositive(value: number, fallback: number): number {
@@ -20,8 +46,8 @@ function finiteNonNegative(value: number, fallback = 0): number {
   return Number.isFinite(value) && value >= 0 ? value : fallback
 }
 
-function buildRenderMetrics<T>(
-  rows: GridRow<T>[],
+function buildRenderMetrics(
+  rows: RenderMetricsRow[],
   totalItemCount: number,
   totalRowCount: number,
   virtualized: boolean,
@@ -35,6 +61,34 @@ function buildRenderMetrics<T>(
     firstMountedRowIndex: rows[0]?.rowIndex ?? null,
     lastMountedRowIndex: rows.at(-1)?.rowIndex ?? null,
   }
+}
+
+function rowsMatch<T>(left: GridRow<T>, right: BaseGridRow<T>): boolean {
+  if (
+    left.rowIndex !== right.rowIndex ||
+    left.startIndex !== right.startIndex ||
+    left.height !== right.height ||
+    left.items.length !== right.items.length
+  ) {
+    return false
+  }
+
+  for (let i = 0; i < right.items.length; i += 1) {
+    const leftItem = left.items[i]
+    const rightItem = right.items[i]
+    if (
+      leftItem == null ||
+      leftItem.item !== rightItem.item ||
+      leftItem.itemIndex !== rightItem.itemIndex ||
+      leftItem.colIndex !== rightItem.colIndex ||
+      leftItem.width !== rightItem.width ||
+      leftItem.height !== rightItem.height
+    ) {
+      return false
+    }
+  }
+
+  return true
 }
 
 export function useGridGallery<T>(
@@ -51,24 +105,33 @@ export function useGridGallery<T>(
   columns: number
   onLoad: (key: string | number) => void
   onError: (key: string | number) => void
+  getItemImageProps: (key: string | number) => GridItemImageProps
   virtualWindow: VirtualWindow | null
   focusedIndex: number
   handleItemFocus: (index: number) => void
   handleItemKeyDown: (itemIndex: number, e: React.KeyboardEvent) => void
 } {
-  // ─── Hooks ─────────────────────────────────────────────────────────────────
-
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(0)
   const [focusedIndex, setFocusedIndex] = useState(0)
   const pendingFocusRef = useRef<number | null>(null)
+  const [loadedKeys, setLoadedKeys] = useState<ReadonlySet<string | number>>(() => new Set())
+  const imagePropsCacheRef = useRef(new Map<string | number, GridItemImageProps>())
+  const previousRowsRef = useRef<GridRow<T>[]>([])
+  const {
+    aspectRatio,
+    columns,
+    focusedIndex: controlledFocusedIndex,
+    gap,
+    onActivate,
+    onFocusedIndexChange,
+    onRenderMetricsChange,
+    overscan,
+    padding = 0,
+    virtualize = false,
+  } = options
 
-  const loadedSet = useRef<Set<string | number>>(new Set())
-  const [loadedTick, setLoadedTick] = useState(0)
-
-  const virtualRange = useVirtualWindow(containerRef, options.virtualize === true, scrollContainerRef)
-
-  // ─── Effects ───────────────────────────────────────────────────────────────
+  const virtualRange = useVirtualWindow(containerRef, virtualize, scrollContainerRef)
 
   useEffect(() => {
     const observer = new ResizeObserver(entries => {
@@ -80,28 +143,34 @@ export function useGridGallery<T>(
     return () => observer.disconnect()
   }, [])
 
-  // ─── Callbacks ─────────────────────────────────────────────────────────────
-
   const onLoad = useCallback((key: string | number) => {
-    if (!loadedSet.current.has(key)) {
-      loadedSet.current.add(key)
-      setLoadedTick(v => v + 1)
-    }
+    setLoadedKeys(current => {
+      if (current.has(key)) return current
+      const next = new Set(current)
+      next.add(key)
+      return next
+    })
   }, [])
 
-  // No layout implication — exposed for API symmetry and stable ref
   const onError = useCallback((_key: string | number) => {}, [])
 
-  // ─── Layout ────────────────────────────────────────────────────────────────
+  const getItemImageProps = useCallback((key: string | number): GridItemImageProps => {
+    const cached = imagePropsCacheRef.current.get(key)
+    if (cached) return cached
 
-  const rawColumns = typeof options.columns === 'function' ? options.columns(containerWidth) : options.columns
-  const resolvedColumns = Math.max(
-    1,
-    Math.round(finitePositive(rawColumns, 1)),
-  )
-  const rawGap = typeof options.gap === 'function' ? options.gap(containerWidth) : (options.gap ?? 0)
+    const imageProps = {
+      onLoad: () => onLoad(key),
+      onError: () => onError(key),
+    }
+    imagePropsCacheRef.current.set(key, imageProps)
+    return imageProps
+  }, [onError, onLoad])
+
+  const rawColumns = typeof columns === 'function' ? columns(containerWidth) : columns
+  const resolvedColumns = Math.max(1, Math.round(finitePositive(rawColumns, 1)))
+  const rawGap = typeof gap === 'function' ? gap(containerWidth) : (gap ?? 0)
   const resolvedGap = finiteNonNegative(rawGap)
-  const rawAspectRatio = typeof options.aspectRatio === 'function' ? options.aspectRatio(containerWidth) : (options.aspectRatio ?? 1)
+  const rawAspectRatio = typeof aspectRatio === 'function' ? aspectRatio(containerWidth) : (aspectRatio ?? 1)
   const resolvedAspectRatio = finitePositive(rawAspectRatio, 1)
 
   const cellWidth =
@@ -112,17 +181,15 @@ export function useGridGallery<T>(
   const hasLayout = cellWidth > 0 && cellHeight >= 0 && items.length > 0
   const totalRows = hasLayout ? Math.ceil(items.length / resolvedColumns) : 0
 
-  // ─── Virtual window ────────────────────────────────────────────────────────
-
   const rowStride = cellHeight + resolvedGap
-  let virtualWindow: VirtualWindow | null = null
 
-  if (options.virtualize && virtualRange !== null && totalRows > 0 && rowStride > 0) {
-    const overscan = options.overscan ?? cellHeight * 4
-    const visibleTop = virtualRange.top - overscan
-    const visibleBottom = virtualRange.bottom + overscan
+  const virtualWindow = useMemo((): VirtualWindow | null => {
+    if (!virtualize || virtualRange === null || totalRows === 0 || rowStride <= 0) return null
 
-    // All rows have uniform height — compute range directly without scanning
+    const resolvedOverscan = overscan ?? cellHeight * 4
+    const visibleTop = virtualRange.top - resolvedOverscan
+    const visibleBottom = virtualRange.bottom + resolvedOverscan
+
     const maxRowIndex = totalRows - 1
     const firstIndex = Math.min(maxRowIndex, Math.max(0, Math.floor(visibleTop / rowStride)))
     let lastIndex = Math.min(maxRowIndex, Math.max(0, Math.ceil(visibleBottom / rowStride) - 1))
@@ -134,63 +201,113 @@ export function useGridGallery<T>(
     const topSpacerHeight = firstIndex * rowStride
     const bottomSpacerHeight = (totalRows - 1 - lastIndex) * rowStride
 
-    virtualWindow = { firstIndex, lastIndex, topSpacerHeight, bottomSpacerHeight }
-  }
+    return { firstIndex, lastIndex, topSpacerHeight, bottomSpacerHeight }
+  }, [cellHeight, overscan, rowStride, totalRows, virtualRange, virtualize])
 
-  const rows = useMemo(() => {
+  const baseRows = useMemo((): BaseGridRow<T>[] => {
     if (!hasLayout) return []
+    if (virtualize && virtualWindow === null) return []
 
-    if (!options.virtualize) {
-      const layoutRows = computeGridLayout(items, resolvedColumns, cellWidth, cellHeight)
-      return layoutRows.map((row, rowIndex) => {
-        const startIndex = rowIndex * resolvedColumns
-        return {
-          rowIndex,
-          startIndex,
-          height: row.height,
-          items: row.items.map((item, colIndex) => ({
-            item,
-            itemIndex: startIndex + colIndex,
-            colIndex,
-            width: row.width,
-            height: row.height,
-            loaded: loadedSet.current.has(item.key),
-          })),
-        }
-      })
-    }
+    const firstRowIndex = virtualWindow?.firstIndex ?? 0
+    const lastRowIndex = virtualWindow?.lastIndex ?? (totalRows - 1)
+    const nextRows: BaseGridRow<T>[] = []
 
-    if (virtualWindow === null) return []
-
-    const renderRows: GridRow<T>[] = []
-    for (let rowIndex = virtualWindow.firstIndex; rowIndex <= virtualWindow.lastIndex; rowIndex++) {
+    for (let rowIndex = firstRowIndex; rowIndex <= lastRowIndex; rowIndex += 1) {
       const startIndex = rowIndex * resolvedColumns
       const endIndex = Math.min(startIndex + resolvedColumns, items.length)
-      const rowItems = items.slice(startIndex, endIndex)
-      renderRows.push({
+      const rowItems: BaseGridItem<T>[] = []
+
+      for (let itemIndex = startIndex; itemIndex < endIndex; itemIndex += 1) {
+        rowItems.push({
+          item: items[itemIndex],
+          itemIndex,
+          colIndex: itemIndex - startIndex,
+          width: cellWidth,
+          height: cellHeight,
+        })
+      }
+
+      nextRows.push({
         rowIndex,
         startIndex,
         height: cellHeight,
-        items: rowItems.map((item, colIndex) => ({
-          item,
-          itemIndex: startIndex + colIndex,
-          colIndex,
-          width: cellWidth,
-          height: cellHeight,
-          loaded: loadedSet.current.has(item.key),
-        })),
+        items: rowItems,
       })
     }
 
-    return renderRows
-  }, [cellHeight, cellWidth, hasLayout, items, options.virtualize, resolvedColumns, virtualWindow, loadedTick])
+    return nextRows
+  }, [
+    cellHeight,
+    cellWidth,
+    hasLayout,
+    items,
+    resolvedColumns,
+    totalRows,
+    virtualWindow?.firstIndex,
+    virtualWindow?.lastIndex,
+    virtualize,
+  ])
 
-  // ─── Navigation ────────────────────────────────────────────────────────────
+  const rows = useMemo(() => {
+    if (baseRows.length === 0) {
+      previousRowsRef.current = []
+      return []
+    }
 
-  const isControlled = options.focusedIndex !== undefined
-  const padding = options.padding ?? 0
+    const previousRows = previousRowsRef.current
+    let allRowsReused = previousRows.length === baseRows.length
 
-  function scrollToRow(rowIndex: number): void {
+    const nextRows = baseRows.map((baseRow, rowOffset) => {
+      const previousRow = previousRows[rowOffset]
+      let rowReused = previousRow != null && rowsMatch(previousRow, baseRow)
+
+      const nextItems = baseRow.items.map((baseItem, itemOffset) => {
+        const loaded = loadedKeys.has(baseItem.item.key)
+        const previousItem = previousRow?.items[itemOffset]
+
+        if (
+          previousItem != null &&
+          previousItem.item === baseItem.item &&
+          previousItem.itemIndex === baseItem.itemIndex &&
+          previousItem.colIndex === baseItem.colIndex &&
+          previousItem.width === baseItem.width &&
+          previousItem.height === baseItem.height &&
+          previousItem.loaded === loaded
+        ) {
+          return previousItem
+        }
+
+        rowReused = false
+        return {
+          ...baseItem,
+          loaded,
+        }
+      })
+
+      if (rowReused && previousRow != null) {
+        return previousRow
+      }
+
+      allRowsReused = false
+      return {
+        rowIndex: baseRow.rowIndex,
+        startIndex: baseRow.startIndex,
+        height: baseRow.height,
+        items: nextItems,
+      }
+    })
+
+    if (allRowsReused) {
+      return previousRows
+    }
+
+    previousRowsRef.current = nextRows
+    return nextRows
+  }, [baseRows, loadedKeys])
+
+  const isControlled = controlledFocusedIndex !== undefined
+
+  const scrollToRow = useCallback((rowIndex: number): void => {
     const rowTop = padding + rowIndex * rowStride
     const rowBottom = rowTop + cellHeight
     const scrollEl = resolveScrollEl(scrollContainerRef)
@@ -215,13 +332,13 @@ export function useGridGallery<T>(
         window.scrollTo({ top: absBottom - window.innerHeight + padding })
       }
     }
-  }
+  }, [cellHeight, padding, rowStride, scrollContainerRef])
 
-  function navigateTo(newIndex: number): void {
+  const navigateTo = useCallback((newIndex: number): void => {
     if (items.length === 0) return
     const clamped = Math.max(0, Math.min(newIndex, items.length - 1))
     if (!isControlled) setFocusedIndex(clamped)
-    options.onFocusedIndexChange?.(clamped)
+    onFocusedIndexChange?.(clamped)
     const target = containerRef.current?.querySelector<HTMLElement>(`[data-grid-index="${clamped}"]`)
     if (target) {
       target.focus()
@@ -229,9 +346,9 @@ export function useGridGallery<T>(
       scrollToRow(Math.floor(clamped / resolvedColumns))
       pendingFocusRef.current = clamped
     }
-  }
+  }, [isControlled, items.length, onFocusedIndexChange, resolvedColumns, scrollToRow])
 
-  function handleItemKeyDown(itemIndex: number, e: React.KeyboardEvent): void {
+  const handleItemKeyDown = useCallback((itemIndex: number, e: React.KeyboardEvent): void => {
     const col = itemIndex % resolvedColumns
     const rowStart = itemIndex - col
     const rowEnd = Math.min(rowStart + resolvedColumns - 1, items.length - 1)
@@ -267,12 +384,11 @@ export function useGridGallery<T>(
       case ' ':
       case 'Enter':
         e.preventDefault()
-        options.onActivate?.(itemIndex, e.shiftKey)
+        onActivate?.(itemIndex, e.shiftKey)
         break
     }
-  }
+  }, [items.length, navigateTo, onActivate, resolvedColumns])
 
-  // No deps — runs after every render to detect when a scrolled-to item appears in the DOM and focus it
   useLayoutEffect(() => {
     if (pendingFocusRef.current === null) return
     const target = containerRef.current?.querySelector<HTMLElement>(`[data-grid-index="${pendingFocusRef.current}"]`)
@@ -282,21 +398,21 @@ export function useGridGallery<T>(
     }
   })
 
-  const effectiveFocusedIndex = isControlled ? options.focusedIndex! : focusedIndex
+  const effectiveFocusedIndex = isControlled ? controlledFocusedIndex! : focusedIndex
 
   const renderMetrics = useMemo(
-    () => buildRenderMetrics(rows, items.length, totalRows, options.virtualize === true),
-    [items.length, options.virtualize, rows, totalRows],
+    () => buildRenderMetrics(baseRows, items.length, totalRows, virtualize),
+    [baseRows, items.length, totalRows, virtualize],
   )
 
   useEffect(() => {
-    options.onRenderMetricsChange?.(renderMetrics)
-  }, [options.onRenderMetricsChange, renderMetrics])
+    onRenderMetricsChange?.(renderMetrics)
+  }, [onRenderMetricsChange, renderMetrics])
 
-  function handleItemFocus(index: number): void {
+  const handleItemFocus = useCallback((index: number): void => {
     if (!isControlled) setFocusedIndex(index)
-    options.onFocusedIndexChange?.(index)
-  }
+    onFocusedIndexChange?.(index)
+  }, [isControlled, onFocusedIndexChange])
 
   return {
     containerRef,
@@ -308,6 +424,7 @@ export function useGridGallery<T>(
     columns: resolvedColumns,
     onLoad,
     onError,
+    getItemImageProps,
     virtualWindow,
     focusedIndex: effectiveFocusedIndex,
     handleItemFocus,

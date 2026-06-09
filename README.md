@@ -42,8 +42,7 @@ import { GridGallery } from '@slithy/react-grid-gallery'
     <img
       src={item.src}
       alt={item.alt}
-      onLoad={handlers.onLoad}
-      onError={handlers.onError}
+      {...handlers.imageProps}
       style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: loaded ? 1 : 0 }}
     />
   )}
@@ -90,6 +89,8 @@ import { GridGallery } from '@slithy/react-grid-gallery'
 | `layout.focused` | `boolean` | Whether this cell is currently focused. Always `false` when `navigable` is not set. |
 | `handlers.onLoad` | `ReactEventHandler<HTMLImageElement>` | Pass to `<img onLoad={...}>` to mark the item loaded |
 | `handlers.onError` | `ReactEventHandler<HTMLImageElement>` | Pass to `<img onError={...}>` for error handling |
+| `handlers.imageProps` | `{ onLoad, onError }` | Stable image props object for the current item. Preferred for memoized item UIs. |
+| `handlers.getImageProps()` | `() => { onLoad, onError }` | Returns the same stable image props object as `handlers.imageProps`. |
 
 ---
 
@@ -145,32 +146,35 @@ const columns = useCallback((width: number) => (width < 700 ? 2 : 4), [])
 <GridGallery items={items} columns={columns} virtualize renderItem={renderPhoto} />
 ```
 
-When `virtualize` is enabled, `renderItem` is called for the currently rendered window as scrolling changes. If your item UI is expensive, render a memoized item component and compare primitive layout values instead of the layout object reference:
+When `virtualize` is enabled, `renderItem` is called for the currently rendered window as scrolling changes. If your item UI is expensive, render a memoized item component and pass the stable image props object through unchanged:
 
 ```tsx
 type PhotoProps = {
   item: PhotoItem
   loaded: boolean
-  onLoad: React.ReactEventHandler<HTMLImageElement>
+  imageProps: {
+    onLoad: React.ReactEventHandler<HTMLImageElement>
+    onError: React.ReactEventHandler<HTMLImageElement>
+  }
 }
 
 const Photo = React.memo(
-  ({ item, loaded, onLoad }: PhotoProps) => (
+  ({ item, loaded, imageProps }: PhotoProps) => (
     <img
       src={item.src}
       alt={item.alt}
       loading="lazy"
       decoding="async"
-      onLoad={onLoad}
+      {...imageProps}
       style={{ opacity: loaded ? 1 : 0 }}
     />
   ),
-  (prev, next) => prev.item === next.item && prev.loaded === next.loaded && prev.onLoad === next.onLoad,
+  (prev, next) => prev.item === next.item && prev.loaded === next.loaded && prev.imageProps === next.imageProps,
 )
 
 const renderPhoto = useCallback(
   (item: PhotoItem, { loaded }, handlers) => (
-    <Photo item={item} loaded={loaded} onLoad={handlers.onLoad} />
+    <Photo item={item} loaded={loaded} imageProps={handlers.imageProps} />
   ),
   [],
 )
@@ -179,6 +183,8 @@ const renderPhoto = useCallback(
 Prefer deriving gallery data from state during render (`useMemo`) over syncing a second item array in an effect. Use stable item keys that do not change when sorting or filtering. For image-heavy grids, pass `loading="lazy"` and `decoding="async"` to your `<img>` elements; virtualization limits mounted DOM, while browser image loading still determines when network and decode work begins.
 
 If you consume `useGridGallery` directly, remember that `rows` means "render rows" when `virtualize` is enabled. Use `totalRows`, `row.rowIndex`, and item `itemIndex` / `colIndex` for ARIA metadata, scroll math, analytics, and any UI that needs full-grid indices.
+
+For custom item rendering with your own memoized components, prefer `getItemImageProps(key)` over creating per-item `onLoad` / `onError` closures during render.
 
 ---
 
@@ -196,7 +202,7 @@ Enable with `navigable`. Arrow keys move focus through the grid; Space/Enter act
     <img
       src={item.src}
       style={{ outline: focused ? '2px solid blue' : 'none', opacity: loaded ? 1 : 0 }}
-      {...handlers}
+      {...handlers.imageProps}
     />
   )}
 />
@@ -281,7 +287,7 @@ The hook underlying `<GridGallery>`. Use this directly for custom rendering or w
 ```ts
 import { useGridGallery } from '@slithy/react-grid-gallery'
 
-const { containerRef, rows, totalRows, cellWidth, cellHeight, gap, columns, onLoad, onError, virtualWindow } =
+const { containerRef, rows, totalRows, cellWidth, cellHeight, gap, columns, onLoad, onError, getItemImageProps, virtualWindow } =
   useGridGallery(items, options, scrollContainerRef)
 ```
 
@@ -298,6 +304,7 @@ const { containerRef, rows, totalRows, cellWidth, cellHeight, gap, columns, onLo
 | `columns` | `number` | Resolved column count |
 | `onLoad` | `(key: string \| number) => void` | Call when an image loads to mark it loaded |
 | `onError` | `(key: string \| number) => void` | Call when an image fails to load |
+| `getItemImageProps` | `(key: string \| number) => { onLoad, onError }` | Returns a stable image props object for the given item key. |
 | `virtualWindow` | `{ firstIndex, lastIndex, topSpacerHeight, bottomSpacerHeight } \| null` | Rendered row window and spacer heights when `virtualize` is true |
 | `focusedIndex` | `number` | Currently focused item index. Reflects `options.focusedIndex` when controlled. |
 | `handleItemFocus` | `(index: number) => void` | Pass to each cell's `onFocus` handler to sync focus state |

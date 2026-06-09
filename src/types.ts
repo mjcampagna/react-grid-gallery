@@ -1,4 +1,4 @@
-import type { RefObject } from 'react'
+import type { ReactEventHandler, RefObject } from 'react'
 
 export type ScrollContainerRef = RefObject<HTMLElement | null> | HTMLElement | null
 
@@ -25,6 +25,21 @@ export type GridOptions = {
   onActivate?: (index: number, shiftKey: boolean) => void
   /** Should be stable (e.g. `useCallback`) — called on every render where metrics change. */
   onRenderMetricsChange?: (metrics: GridRenderMetrics) => void
+}
+
+export type GridItemLayout = {
+  loaded: boolean
+  focused: boolean
+}
+
+export type GridItemImageProps = {
+  onLoad: ReactEventHandler<HTMLImageElement>
+  onError: ReactEventHandler<HTMLImageElement>
+}
+
+export type GridItemRenderHandlers = GridItemImageProps & {
+  imageProps: GridItemImageProps
+  getImageProps: () => GridItemImageProps
 }
 
 export type GalleryItem<T> = T & {

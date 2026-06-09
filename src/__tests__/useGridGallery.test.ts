@@ -1,5 +1,5 @@
-import { act, render, renderHook, screen } from '@testing-library/react'
-import { createElement, useRef } from 'react'
+import { act, fireEvent, render, renderHook, screen } from '@testing-library/react'
+import { createElement, memo, useRef } from 'react'
 
 import { GridGallery } from '../GridGallery'
 import { useGridGallery } from '../useGridGallery'
@@ -113,6 +113,10 @@ function getLatest(latest: HookState | null): HookState {
   return latest
 }
 
+function buildRenderCounts(keys: string[]): Record<string, number> {
+  return Object.fromEntries(keys.map(key => [key, 0]))
+}
+
 // ─── Layout ───────────────────────────────────────────────────────────────────
 
 describe('layout', () => {
@@ -202,6 +206,20 @@ describe('layout', () => {
     expect(state.rows).toHaveLength(2)
     expect(state.rows.flatMap(row => row.items.map(entry => entry.item.key))).not.toContain('99')
   })
+
+  it('returns stable image props for unaffected items across load updates', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, OPTIONS))
+    fireResize(WIDTH)
+
+    const before = result.current.getItemImageProps('0')
+
+    act(() => { result.current.onLoad('1') })
+
+    expect(result.current.getItemImageProps('0')).toBe(before)
+    expect(result.current.getItemImageProps('0').onLoad).toBe(before.onLoad)
+    expect(result.current.getItemImageProps('0').onError).toBe(before.onError)
+  })
+
   it('reports mounted render metrics for virtualized rows', () => {
     const onRenderMetricsChange = vi.fn()
 
@@ -228,6 +246,30 @@ describe('layout', () => {
       lastMountedRowIndex: 1,
     })
   })
+
+  it('does not report render metrics for load-only updates', () => {
+    const onRenderMetricsChange = vi.fn()
+    let latest: HookState | null = null
+
+    render(createElement(VirtualHookHarness, {
+      onValue: value => { latest = value },
+      options: { columns: 5, virtualize: true, overscan: 0, onRenderMetricsChange },
+    }))
+
+    const scrollEl = screen.getByTestId('scroll')
+    const gridEl = screen.getByTestId('grid')
+    defineReadonlyNumber(scrollEl, 'clientHeight', 200)
+    setVirtualRects(scrollEl, gridEl)
+
+    fireResize(500)
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    onRenderMetricsChange.mockClear()
+    act(() => { getLatest(latest).onLoad('0') })
+    act(() => { getLatest(latest).onLoad('99') })
+
+    expect(onRenderMetricsChange).not.toHaveBeenCalled()
+  })
 })
 
 // ─── Component Rendering ─────────────────────────────────────────────────────
@@ -246,6 +288,121 @@ describe('GridGallery', () => {
 
     expect(gridEl).toHaveAttribute('aria-rowcount', '20')
     expect(screen.getAllByRole('row')).toHaveLength(2)
+  })
+
+  it('rerenders only the loaded item in a non-virtualized gallery', () => {
+    const renderCounts = buildRenderCounts(ITEMS.map(entry => entry.key))
+
+    render(createElement(GridGallery, {
+      items: ITEMS,
+      columns: 3,
+      renderItem: (galleryItem, _layout, handlers) => {
+        renderCounts[galleryItem.key] += 1
+        return createElement('img', {
+          'data-testid': `img-${galleryItem.key}`,
+          ...handlers.imageProps,
+        })
+      },
+    }))
+
+    fireResize(WIDTH)
+
+    expect(renderCounts['0']).toBe(1)
+    expect(renderCounts['1']).toBe(1)
+    expect(renderCounts['8']).toBe(1)
+
+    fireEvent.load(screen.getByTestId('img-0'))
+
+    expect(renderCounts['0']).toBe(2)
+    expect(renderCounts['1']).toBe(1)
+    expect(renderCounts['8']).toBe(1)
+  })
+
+  it('rerenders only the loaded mounted item when virtualized', () => {
+    const renderCounts = buildRenderCounts(MANY_ITEMS.map(entry => entry.key))
+    const scrollRef = { current: null as HTMLDivElement | null }
+
+    render(createElement(
+      'div',
+      { 'data-testid': 'scroll', ref: (node: HTMLDivElement | null) => { scrollRef.current = node } },
+      createElement(GridGallery, {
+        items: MANY_ITEMS,
+        columns: 5,
+        virtualize: true,
+        overscan: 0,
+        scrollContainerRef: scrollRef,
+        renderItem: (galleryItem, _layout, handlers) => {
+          renderCounts[galleryItem.key] += 1
+          return createElement('img', {
+            'data-testid': `img-${galleryItem.key}`,
+            ...handlers.imageProps,
+          })
+        },
+      }),
+    ))
+
+    const scrollEl = screen.getByTestId('scroll')
+    const gridEl = scrollEl.querySelector('div')
+    if (!(gridEl instanceof HTMLElement)) throw new Error('grid not found')
+
+    defineReadonlyNumber(scrollEl, 'clientHeight', 200)
+    setVirtualRects(scrollEl, gridEl)
+
+    fireResize(500)
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    expect(renderCounts['0']).toBe(1)
+    expect(renderCounts['9']).toBe(1)
+    expect(renderCounts['10']).toBe(0)
+
+    fireEvent.load(screen.getByTestId('img-0'))
+
+    expect(renderCounts['0']).toBe(2)
+    expect(renderCounts['1']).toBe(1)
+    expect(renderCounts['9']).toBe(1)
+    expect(renderCounts['10']).toBe(0)
+  })
+
+  it('supports memoized item content with stable image props', () => {
+    const renderCounts = buildRenderCounts(ITEMS.map(entry => entry.key))
+
+    const MemoPhoto = memo(function MemoPhoto({
+      itemKey,
+      loaded,
+      imageProps,
+    }: {
+      itemKey: string | number
+      loaded: boolean
+      imageProps: { onLoad: React.ReactEventHandler<HTMLImageElement>; onError: React.ReactEventHandler<HTMLImageElement> }
+    }) {
+      renderCounts[String(itemKey)] += 1
+      return createElement('img', {
+        'data-testid': `memo-img-${itemKey}`,
+        'data-loaded': String(loaded),
+        ...imageProps,
+      })
+    })
+
+    render(createElement(GridGallery, {
+      items: ITEMS,
+      columns: 3,
+      renderItem: (galleryItem, layout, handlers) =>
+        createElement(MemoPhoto, {
+          itemKey: galleryItem.key,
+          loaded: layout.loaded,
+          imageProps: handlers.getImageProps(),
+        }),
+    }))
+
+    fireResize(WIDTH)
+
+    expect(renderCounts['0']).toBe(1)
+    expect(renderCounts['1']).toBe(1)
+
+    fireEvent.load(screen.getByTestId('memo-img-0'))
+
+    expect(renderCounts['0']).toBe(2)
+    expect(renderCounts['1']).toBe(1)
   })
 })
 

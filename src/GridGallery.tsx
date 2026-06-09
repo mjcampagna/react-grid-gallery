@@ -1,24 +1,112 @@
-import type { ReactEventHandler, ReactNode } from 'react'
+import { memo, useCallback, useRef, type ReactNode } from 'react'
 
 import { useGridGallery } from './useGridGallery'
-import type { GalleryItem, GridOptions, ScrollContainerRef } from './types'
+import type {
+  GalleryItem,
+  GridItemLayout,
+  GridItemRenderHandlers,
+  GridOptions,
+  GridRow,
+  ScrollContainerRef,
+} from './types'
+
+type RenderItem<T> = (
+  item: GalleryItem<T>,
+  layout: GridItemLayout,
+  handlers: GridItemRenderHandlers,
+) => ReactNode
 
 type Props<T> = {
   items: GalleryItem<T>[]
-  renderItem: (
-    item: GalleryItem<T>,
-    layout: { loaded: boolean; focused: boolean },
-    handlers: { onLoad: ReactEventHandler<HTMLImageElement>; onError: ReactEventHandler<HTMLImageElement> },
-  ) => ReactNode
+  renderItem: RenderItem<T>
   scrollContainerRef?: ScrollContainerRef
 } & GridOptions
 
-export function GridGallery<T>({ items, renderItem, scrollContainerRef, ...options }: Props<T>): ReactNode {
-  const { containerRef, rows, totalRows, cellHeight, gap, columns, onLoad, onError, virtualWindow, focusedIndex, handleItemFocus, handleItemKeyDown } = useGridGallery(
-    items,
-    options,
-    scrollContainerRef,
+type CellProps<T> = {
+  cellHeight: number
+  entry: GridRow<T>['items'][number]
+  focused: boolean
+  handlers: GridItemRenderHandlers
+  navigable: boolean
+  onItemFocus: (index: number) => void
+  onItemKeyDown: (itemIndex: number, e: React.KeyboardEvent) => void
+  renderItem: RenderItem<T>
+}
+
+function GridGalleryCellInner<T>({
+  cellHeight,
+  entry,
+  focused,
+  handlers,
+  navigable,
+  onItemFocus,
+  onItemKeyDown,
+  renderItem,
+}: CellProps<T>): ReactNode {
+  return (
+    <div
+      style={{ height: `${cellHeight}px` }}
+      {...(navigable ? {
+        role: 'gridcell',
+        'aria-colindex': entry.colIndex + 1,
+        tabIndex: focused ? 0 : -1,
+        'data-grid-index': entry.itemIndex,
+        onKeyDown: (e: React.KeyboardEvent) => onItemKeyDown(entry.itemIndex, e),
+        onFocus: () => onItemFocus(entry.itemIndex),
+      } : {})}
+    >
+      {renderItem(
+        entry.item,
+        { loaded: entry.loaded, focused },
+        handlers,
+      )}
+    </div>
   )
+}
+
+const GridGalleryCell = memo(
+  GridGalleryCellInner,
+  <T,>(prev: CellProps<T>, next: CellProps<T>) =>
+    prev.cellHeight === next.cellHeight &&
+    prev.entry === next.entry &&
+    prev.focused === next.focused &&
+    prev.handlers === next.handlers &&
+    prev.navigable === next.navigable &&
+    prev.onItemFocus === next.onItemFocus &&
+    prev.onItemKeyDown === next.onItemKeyDown &&
+    prev.renderItem === next.renderItem,
+) as <T>(props: CellProps<T>) => ReactNode
+
+export function GridGallery<T>({ items, renderItem, scrollContainerRef, ...options }: Props<T>): ReactNode {
+  const {
+    containerRef,
+    rows,
+    totalRows,
+    cellHeight,
+    gap,
+    columns,
+    getItemImageProps,
+    virtualWindow,
+    focusedIndex,
+    handleItemFocus,
+    handleItemKeyDown,
+  } = useGridGallery(items, options, scrollContainerRef)
+
+  const renderHandlersCacheRef = useRef(new Map<string | number, GridItemRenderHandlers>())
+
+  const getItemRenderHandlers = useCallback((key: string | number): GridItemRenderHandlers => {
+    const cached = renderHandlersCacheRef.current.get(key)
+    if (cached) return cached
+
+    const imageProps = getItemImageProps(key)
+    const nextHandlers = {
+      ...imageProps,
+      imageProps,
+      getImageProps: () => imageProps,
+    }
+    renderHandlersCacheRef.current.set(key, nextHandlers)
+    return nextHandlers
+  }, [getItemImageProps])
 
   const padding = options.padding ?? 0
   const navigable = options.navigable === true
@@ -32,42 +120,27 @@ export function GridGallery<T>({ items, renderItem, scrollContainerRef, ...optio
       {virtualWindow && virtualWindow.topSpacerHeight > 0 && (
         <div style={{ height: virtualWindow.topSpacerHeight, contain: 'layout' }} />
       )}
-      {rows.map(row => {
-        return (
-          <div
-            key={row.rowIndex}
-            style={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: `${gap}px`, contain: 'layout' }}
-            {...(navigable ? { role: 'row', 'aria-rowindex': row.rowIndex + 1 } : {})}
-          >
-            {row.items.map(({ item, itemIndex, colIndex, loaded }) => {
-              const focused = navigable && focusedIndex === itemIndex
-              return (
-                <div
-                  key={item.key}
-                  style={{ height: `${cellHeight}px` }}
-                  {...(navigable ? {
-                    role: 'gridcell',
-                    'aria-colindex': colIndex + 1,
-                    tabIndex: focused ? 0 : -1,
-                    'data-grid-index': itemIndex,
-                    onKeyDown: (e) => handleItemKeyDown(itemIndex, e),
-                    onFocus: () => handleItemFocus(itemIndex),
-                  } : {})}
-                >
-                  {renderItem(
-                    item,
-                    { loaded, focused },
-                    {
-                      onLoad: () => onLoad(item.key),
-                      onError: () => onError(item.key),
-                    },
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )
-      })}
+      {rows.map(row => (
+        <div
+          key={row.rowIndex}
+          style={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: `${gap}px`, contain: 'layout' }}
+          {...(navigable ? { role: 'row', 'aria-rowindex': row.rowIndex + 1 } : {})}
+        >
+          {row.items.map(entry => (
+            <GridGalleryCell
+              key={entry.item.key}
+              cellHeight={cellHeight}
+              entry={entry}
+              focused={navigable && focusedIndex === entry.itemIndex}
+              handlers={getItemRenderHandlers(entry.item.key)}
+              navigable={navigable}
+              onItemFocus={handleItemFocus}
+              onItemKeyDown={handleItemKeyDown}
+              renderItem={renderItem}
+            />
+          ))}
+        </div>
+      ))}
       {virtualWindow && virtualWindow.bottomSpacerHeight > 0 && (
         <div style={{ height: virtualWindow.bottomSpacerHeight, contain: 'layout' }} />
       )}
