@@ -570,6 +570,65 @@ describe('virtualization geometry', () => {
     expect(getLatest(latest).rows.map(row => row.rowIndex)).toEqual([0, 1, 2, 3, 4, 5])
   })
 
+  it('does not rerender when a scroll event leaves the visible range unchanged', () => {
+    let latest: HookState | null = null
+    let renderCount = 0
+    render(createElement(VirtualHookHarness, {
+      onValue: value => {
+        latest = value
+        renderCount += 1
+      },
+    }))
+
+    const scrollEl = screen.getByTestId('scroll')
+    const gridEl = screen.getByTestId('grid')
+    defineReadonlyNumber(scrollEl, 'clientHeight', 200)
+    setVirtualRects(scrollEl, gridEl)
+
+    fireResize(500)
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    expect(getLatest(latest).rows).toHaveLength(2)
+    const renderCountBefore = renderCount
+
+    // same scroll position → same range → no state update, no rerender
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    expect(renderCount).toBe(renderCountBefore)
+  })
+
+  it('attaches to a scroll container whose ref is populated after mount', () => {
+    const lateRef: { current: HTMLElement | null } = { current: null }
+    let latest: HookState | null = null
+
+    function LateRefHarness() {
+      const value = useGridGallery(MANY_ITEMS, { columns: 5, virtualize: true, overscan: 0 }, lateRef)
+      latest = value
+      return createElement(
+        'div',
+        { 'data-testid': 'scroll' },
+        createElement('div', { 'data-testid': 'grid', ref: value.containerRef }),
+      )
+    }
+
+    const { rerender } = render(createElement(LateRefHarness))
+
+    const scrollEl = screen.getByTestId('scroll')
+    const gridEl = screen.getByTestId('grid')
+    defineReadonlyNumber(scrollEl, 'clientHeight', 200)
+    setVirtualRects(scrollEl, gridEl, { scrollTop: 500 })
+
+    // the ref only points at the scroll container after the gallery mounted
+    lateRef.current = scrollEl
+    rerender(createElement(LateRefHarness))
+
+    fireResize(500)
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    const state = getLatest(latest)
+    expect(state.rows.map(row => row.rowIndex)).toEqual([5, 6])
+  })
+
   it('treats non-finite padding as zero instead of blanking the gallery', () => {
     let latest: HookState | null = null
     render(createElement(VirtualHookHarness, {

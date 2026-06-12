@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 
 import type { ScrollContainerRef } from './types'
 
@@ -18,7 +18,9 @@ export function resolveScrollEl(ref: ScrollContainerRef | undefined): HTMLElemen
  *
  * When `scrollContainerRef` is provided, the scroll listener is attached to
  * that element instead of `window`. Use this when the gallery lives inside a
- * scrollable div rather than the page itself.
+ * scrollable div rather than the page itself. The ref is re-resolved on every
+ * render, so it may be populated after mount or point at a remounted element;
+ * listeners re-attach whenever the resolved element changes.
  */
 export function useVirtualWindow(
   containerRef: React.RefObject<HTMLElement | null>,
@@ -26,9 +28,17 @@ export function useVirtualWindow(
   scrollContainerRef?: ScrollContainerRef,
 ): { top: number; bottom: number } | null {
   const [range, setRange] = useState<{ top: number; bottom: number } | null>(null)
+  const [scrollEl, setScrollEl] = useState<HTMLElement | null>(null)
   const rafIdRef = useRef<number | null>(null)
 
-  useEffect(() => {
+  // No dependency array: the ref's element may appear after this hook's first
+  // effect (late mount) or change identity (remount), neither of which changes
+  // the ref object itself. The setState bails out when the element is the same.
+  useLayoutEffect(() => {
+    setScrollEl(resolveScrollEl(scrollContainerRef))
+  })
+
+  useLayoutEffect(() => {
     if (!enabled) return
 
     const publishRange = () => {
@@ -36,17 +46,18 @@ export function useVirtualWindow(
       if (!el) return
 
       const rect = el.getBoundingClientRect()
-      const sc = resolveScrollEl(scrollContainerRef)
 
-      if (sc) {
-        const scRect = sc.getBoundingClientRect()
-        const top = sc.scrollTop - (rect.top - scRect.top + sc.scrollTop)
-        setRange({ top, bottom: top + sc.clientHeight })
-        return
+      let top: number
+      let bottom: number
+      if (scrollEl) {
+        top = scrollEl.getBoundingClientRect().top - rect.top
+        bottom = top + scrollEl.clientHeight
+      } else {
+        top = -rect.top
+        bottom = top + window.innerHeight
       }
 
-      const top = window.scrollY - (rect.top + window.scrollY)
-      setRange({ top, bottom: top + window.innerHeight })
+      setRange(prev => (prev && prev.top === top && prev.bottom === bottom ? prev : { top, bottom }))
     }
 
     const scheduleUpdate = () => {
@@ -59,24 +70,27 @@ export function useVirtualWindow(
 
     publishRange()
 
-    const target = resolveScrollEl(scrollContainerRef) ?? window
+    const target: HTMLElement | Window = scrollEl ?? window
     target.addEventListener('scroll', scheduleUpdate, { passive: true })
     if (target === window) {
-      window.addEventListener('resize', publishRange, { passive: true })
+      window.addEventListener('resize', scheduleUpdate, { passive: true })
     }
 
     const ro = new ResizeObserver(publishRange)
     const containerEl = containerRef.current
     if (containerEl) ro.observe(containerEl)
-    if (target !== window) ro.observe(target as HTMLElement)
+    if (scrollEl) ro.observe(scrollEl)
 
     return () => {
       target.removeEventListener('scroll', scheduleUpdate)
-      if (target === window) window.removeEventListener('resize', publishRange)
-      if (rafIdRef.current !== null) cancelAnimationFrame(rafIdRef.current)
+      if (target === window) window.removeEventListener('resize', scheduleUpdate)
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current)
+        rafIdRef.current = null
+      }
       ro.disconnect()
     }
-  }, [enabled, containerRef, scrollContainerRef])
+  }, [enabled, containerRef, scrollEl])
 
   return enabled ? range : null
 }
