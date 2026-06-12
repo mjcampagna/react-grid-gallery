@@ -328,7 +328,7 @@ const rows = computeGridLayout(items, 4, 200, 250)
 
 ## Migration
 
-### Next major release (breaking)
+### 1.0.0 (breaking)
 
 This release revises the public API with no backward-compatibility shims.
 
