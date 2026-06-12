@@ -114,6 +114,7 @@ export function useGridGallery<T>(
   cellHeight: number
   gap: number
   columns: number
+  itemKeys: ReadonlySet<string | number>
   onLoad: (key: string | number) => void
   onError: (key: string | number) => void
   getItemImageProps: (key: string | number) => GridItemImageProps
@@ -430,7 +431,7 @@ export function useGridGallery<T>(
     }
   })
 
-  const effectiveFocusedIndex = isControlled ? controlledFocusedIndex! : focusedIndex
+  const effectiveFocusedIndex = controlledFocusedIndex ?? focusedIndex
 
   const renderMetrics = useMemo(
     () => buildRenderMetrics(baseRows, items.length, totalRows, virtualize),
@@ -454,6 +455,7 @@ export function useGridGallery<T>(
     cellHeight,
     gap: resolvedGap,
     columns: resolvedColumns,
+    itemKeys,
     onLoad,
     onError,
     getItemImageProps,

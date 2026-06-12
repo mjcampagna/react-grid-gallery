@@ -175,11 +175,11 @@ No test exercises `virtualize` together with a non-zero `gap` (would catch findi
 |---|----------|---------|
 | 1 | Bug | Spacer heights inflated by `gap`, causing incorrect scroll height and row misalignment in virtualized galleries |
 | 2 | Bug | `padding` not subtracted before virtual row index calculation |
-| 3 | Type | `!` non-null assertion against workspace convention |
+| 3 | ~~Type~~ | ~~`!` non-null assertion against workspace convention~~ ✓ |
 | 4 | API | `GridLayoutRow.width` misleadingly named (stores `cellWidth`) |
 | 5 | API | `GridItemRenderHandlers` exposes three redundant paths to the same props |
-| 6 | Perf | `itemKeys` computed independently in both `useGridGallery` and `GridGallery` |
-| 7 | Quality | `CellProps<T>` / `MemoCellProps` near-duplicate types with pass-through wrapper |
+| 6 | ~~Perf~~ | ~~`itemKeys` computed independently in both `useGridGallery` and `GridGallery`~~ ✓ |
+| 7 | ~~Quality~~ | ~~`CellProps<T>` / `MemoCellProps` near-duplicate types with pass-through wrapper~~ ✓ |
 | 8 | Quality | Inconsistent debounce strategy for scroll vs. resize in `useVirtualWindow` |
 | 9 | Quality | Undocumented `scrollContainerRef` identity instability (superseded by 16) |
 | 10 | Quality | Unnecessary `querySelector` when `navigable` is false (hook consumers only) |
@@ -208,9 +208,9 @@ No test exercises `virtualize` together with a non-zero `gap` (would catch findi
 
 | Finding | Task | Model |
 |---|---|---|
-| 3 | Replace `controlledFocusedIndex!` with `?? focusedIndex` | Sonnet |
-| 6 | Return `itemKeys` from `useGridGallery`, reuse in `GridGallery` | Sonnet |
-| 7 | Collapse `CellProps`/`MemoCellProps` duplication and the pass-through wrapper | Sonnet |
+| ~~3~~ | ~~Replace `controlledFocusedIndex!` with `?? focusedIndex`~~ | ~~Sonnet~~ ✓ |
+| ~~6~~ | ~~Return `itemKeys` from `useGridGallery`, reuse in `GridGallery`~~ | ~~Sonnet~~ ✓ |
+| ~~7~~ | ~~Collapse `CellProps`/`MemoCellProps` duplication and the pass-through wrapper~~ | ~~Sonnet~~ ✓ |
 | 15 | Re-key row reuse by `rowIndex` instead of array offset | Opus |
 | — | Delete the empty `src/docs/` directory | anyone |
 

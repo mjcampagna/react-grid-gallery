@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useRef, type ReactNode } from 'react'
 
 import { useGridGallery } from './useGridGallery'
 import type {
@@ -22,19 +22,7 @@ type Props<T> = {
   scrollContainerRef?: ScrollContainerRef
 } & GridOptions
 
-type CellProps<T> = {
-  cellHeight: number
-  entry: GridRow<T>['items'][number]
-  focused: boolean
-  handlers: GridItemRenderHandlers
-  navigable: boolean
-  onItemFocus: (index: number) => void
-  onItemKeyDown: (itemIndex: number, e: React.KeyboardEvent) => void
-  renderContent: () => ReactNode
-  renderItem: unknown
-}
-
-type MemoCellProps = {
+type CellProps = {
   cellHeight: number
   entry: GridRow<unknown>['items'][number]
   focused: boolean
@@ -55,7 +43,7 @@ function GridGalleryCellInner({
   onItemFocus,
   onItemKeyDown,
   renderContent,
-}: MemoCellProps): ReactNode {
+}: CellProps): ReactNode {
   return (
     <div
       style={{ height: `${cellHeight}px` }}
@@ -73,7 +61,7 @@ function GridGalleryCellInner({
   )
 }
 
-function areCellPropsEqual(prev: MemoCellProps, next: MemoCellProps): boolean {
+function areCellPropsEqual(prev: CellProps, next: CellProps): boolean {
   return prev.cellHeight === next.cellHeight &&
     prev.entry === next.entry &&
     prev.focused === next.focused &&
@@ -89,22 +77,6 @@ const MemoGridGalleryCell = memo(
   areCellPropsEqual,
 )
 
-function GridGalleryCell<T>(props: CellProps<T>): ReactNode {
-  return (
-    <MemoGridGalleryCell
-      cellHeight={props.cellHeight}
-      entry={props.entry}
-      focused={props.focused}
-      handlers={props.handlers}
-      navigable={props.navigable}
-      onItemFocus={props.onItemFocus}
-      onItemKeyDown={props.onItemKeyDown}
-      renderContent={props.renderContent}
-      renderItem={props.renderItem}
-    />
-  )
-}
-
 export function GridGallery<T>({ items, renderItem, scrollContainerRef, ...options }: Props<T>): ReactNode {
   const {
     containerRef,
@@ -113,6 +85,7 @@ export function GridGallery<T>({ items, renderItem, scrollContainerRef, ...optio
     cellHeight,
     gap,
     columns,
+    itemKeys,
     getItemImageProps,
     virtualWindow,
     focusedIndex,
@@ -121,7 +94,6 @@ export function GridGallery<T>({ items, renderItem, scrollContainerRef, ...optio
   } = useGridGallery(items, options, scrollContainerRef)
 
   const renderHandlersCacheRef = useRef(new Map<string | number, GridItemRenderHandlers>())
-  const itemKeys = useMemo(() => new Set(items.map(item => item.key)), [items])
 
   useEffect(() => {
     for (const key of renderHandlersCacheRef.current.keys()) {
@@ -164,7 +136,7 @@ export function GridGallery<T>({ items, renderItem, scrollContainerRef, ...optio
           {...(navigable ? { role: 'row', 'aria-rowindex': row.rowIndex + 1 } : {})}
         >
           {row.items.map(entry => (
-            <GridGalleryCell
+            <MemoGridGalleryCell
               key={entry.item.key}
               cellHeight={cellHeight}
               entry={entry}
