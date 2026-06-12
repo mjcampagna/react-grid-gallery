@@ -323,3 +323,33 @@ const rows = computeGridLayout(items, 4, 200, 250)
 ```
 
 **Returns:** `GridLayoutRow<T>[]` — each row has `items: GalleryItem<T>[]`, `cellWidth: number`, and `height: number`. `cellWidth` is the floored integer cell width; cells render as `1fr` tracks, so treat it as an approximation for `sizes`/`srcset`, not a pixel-exact width.
+
+---
+
+## Migration
+
+### Next major release (breaking)
+
+This release revises the public API with no backward-compatibility shims.
+
+**1. `GridItemRenderHandlers` collapsed to a single `imageProps` field.** The top-level handler spread and `getImageProps()` are removed; spread `imageProps` onto your `<img>`.
+
+```tsx
+// Before
+renderItem={(item, layout, handlers) => <img {...handlers} />}
+renderItem={(item, layout, handlers) => <img {...handlers.getImageProps()} />}
+
+// After
+renderItem={(item, layout, handlers) => <img {...handlers.imageProps} />}
+```
+
+**2. `GridLayoutRow.width` renamed to `cellWidth`.** Only affects direct `computeGridLayout` consumers.
+
+```ts
+// Before
+rows.map(row => row.width)
+// After
+rows.map(row => row.cellWidth)
+```
+
+**3. `onError` now marks an item loaded (terminal) instead of being a no-op.** No code change required, but be aware: a failed image now flips `layout.loaded` to `true`, so a fade-in-on-`loaded` cell becomes visible (showing the broken `<img>`) rather than staying hidden. If you want to distinguish a broken image, branch inside your `renderItem` on your own error state.
