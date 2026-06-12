@@ -135,6 +135,7 @@ export function useGridGallery<T>(
     columns,
     focusedIndex: controlledFocusedIndex,
     gap,
+    navigable = false,
     onActivate,
     onFocusedIndexChange,
     onRenderMetricsChange,
@@ -374,7 +375,7 @@ export function useGridGallery<T>(
   }, [cellHeight, resolvedPadding, rowStride, scrollContainerRef])
 
   const navigateTo = useCallback((newIndex: number): void => {
-    if (items.length === 0) return
+    if (!navigable || items.length === 0) return
     const clamped = Math.max(0, Math.min(newIndex, items.length - 1))
     if (!isControlled) setFocusedIndex(clamped)
     onFocusedIndexChange?.(clamped)
@@ -385,9 +386,10 @@ export function useGridGallery<T>(
       scrollToRow(Math.floor(clamped / resolvedColumns))
       pendingFocusRef.current = clamped
     }
-  }, [isControlled, items.length, onFocusedIndexChange, resolvedColumns, scrollToRow])
+  }, [isControlled, items.length, navigable, onFocusedIndexChange, resolvedColumns, scrollToRow])
 
   const handleItemKeyDown = useCallback((itemIndex: number, e: React.KeyboardEvent): void => {
+    if (!navigable) return
     const col = itemIndex % resolvedColumns
     const rowStart = itemIndex - col
     const rowEnd = Math.min(rowStart + resolvedColumns - 1, items.length - 1)
@@ -426,7 +428,7 @@ export function useGridGallery<T>(
         onActivate?.(itemIndex, e.shiftKey)
         break
     }
-  }, [items.length, navigateTo, onActivate, resolvedColumns])
+  }, [items.length, navigable, navigateTo, onActivate, resolvedColumns])
 
   useLayoutEffect(() => {
     if (pendingFocusRef.current === null) return
@@ -437,7 +439,11 @@ export function useGridGallery<T>(
     }
   })
 
-  const effectiveFocusedIndex = controlledFocusedIndex ?? focusedIndex
+  // Clamp into range so a stale focusedIndex (items shrank, or an out-of-range
+  // controlled value) never points past the end of the list.
+  const rawFocusedIndex = controlledFocusedIndex ?? focusedIndex
+  const effectiveFocusedIndex =
+    items.length > 0 ? Math.max(0, Math.min(rawFocusedIndex, items.length - 1)) : 0
 
   const renderMetrics = useMemo(
     () => buildRenderMetrics(baseRows, items.length, totalRows, virtualize),

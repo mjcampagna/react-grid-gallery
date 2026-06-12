@@ -182,9 +182,9 @@ No test exercises `virtualize` together with a non-zero `gap` (would catch findi
 | 7 | ~~Quality~~ | ~~`CellProps<T>` / `MemoCellProps` near-duplicate types with pass-through wrapper~~ ✓ |
 | 8 | ~~Quality~~ | ~~Inconsistent debounce strategy for scroll vs. resize in `useVirtualWindow`~~ ✓ |
 | 9 | ~~Quality~~ | ~~Undocumented `scrollContainerRef` identity instability (superseded by 16)~~ ✓ |
-| 10 | Quality | Unnecessary `querySelector` when `navigable` is false (hook consumers only) |
+| 10 | ~~Quality~~ | ~~Unnecessary `querySelector` when `navigable` is false (hook consumers only)~~ ✓ |
 | 11 | ~~Bug~~ | ~~`overscan`/`padding` unsanitized — `NaN` overscan blanks the gallery~~ ✓ |
-| 12 | Bug (a11y) | Roving tabindex can have zero tab stops (virtualized scroll, or shrinking items) |
+| 12 | ~~Bug (a11y)~~ | ~~Roving tabindex can have zero tab stops (virtualized scroll, or shrinking items)~~ ✓ |
 | 13 | ~~Bug~~ | ~~Virtualized first paint is empty; no SSR content~~ ✓ (see note below) |
 | 14 | ~~Perf~~ | ~~New `range` object allocated per scroll/resize event even when unchanged~~ ✓ |
 | 15 | Perf | Row reuse keyed by array offset defeats cell memoization on every scroll step |
@@ -203,7 +203,7 @@ No test exercises `virtualize` together with a non-zero `gap` (would catch findi
 
 - ~~**Cluster A — Virtualization geometry: 1, 2, 11, 19.** → **Fable.**~~ ✓ Done (commit `132ce2c`). All live in the same ~20 lines of the `virtualWindow` memo; one scroll-height invariant test proves all of it.
 - ~~**Cluster B — `useVirtualWindow` rework: 8, 9, 13, 14, 16.** → **Fable.**~~ ✓ Done. The hook now resolves the scroll element into state via a per-render layout effect (fixes 9 and 16: late refs, remounts, and unstable ref identity all re-attach correctly), routes scroll and resize through the same rAF-debounced update (8), bails out of `setRange` when the range is unchanged (14), and runs listener setup plus the initial publish in `useLayoutEffect` so the first range lands before paint (13).
-- **Cluster C — Focus & keyboard navigation: 10, 12.** → **Opus.** Both touch `navigateTo`/`handleItemFocus`/cell `tabIndex` logic. Roving-tabindex semantics under virtualization need care, but the design space is the well-trodden ARIA grid pattern.
+- ~~**Cluster C — Focus & keyboard navigation: 10, 12.** → **Opus.**~~ ✓ Done. The hook now reads the `navigable` option and bails out of `navigateTo`/`handleItemKeyDown` when it's off (10), and clamps the effective focused index into `[0, items.length - 1]` so a stale or out-of-range value never points past the list (12, shrinking items). `GridGallery` separates the roving tab stop from visual focus: when virtualization scrolls the focused cell out of the mounted window, the first mounted cell becomes the lone `tabIndex={0}` stop so the grid stays keyboard-reachable (12, virtualized scroll). Four tests added.
 - **Cluster D — Public API revision: 4, 5, 17, 18.** → **Opus.** Breaking or surface-area changes to exported types; ship as one coordinated semver bump through the slithy monorepo. API design judgment plus changelog discipline, not hard algorithms.
 
 ### Independent items

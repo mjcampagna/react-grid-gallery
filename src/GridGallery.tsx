@@ -25,7 +25,7 @@ type Props<T> = {
 type CellProps = {
   cellHeight: number
   entry: GridRow<unknown>['items'][number]
-  focused: boolean
+  tabStop: boolean
   handlers: GridItemRenderHandlers
   navigable: boolean
   onItemFocus: (index: number) => void
@@ -37,7 +37,7 @@ type CellProps = {
 function GridGalleryCellInner({
   cellHeight,
   entry,
-  focused,
+  tabStop,
   navigable,
   onItemFocus,
   onItemKeyDown,
@@ -49,7 +49,7 @@ function GridGalleryCellInner({
       {...(navigable ? {
         role: 'gridcell',
         'aria-colindex': entry.colIndex + 1,
-        tabIndex: focused ? 0 : -1,
+        tabIndex: tabStop ? 0 : -1,
         'data-grid-index': entry.itemIndex,
         onKeyDown: (e: React.KeyboardEvent) => onItemKeyDown(entry.itemIndex, e),
         onFocus: () => onItemFocus(entry.itemIndex),
@@ -63,7 +63,7 @@ function GridGalleryCellInner({
 function areCellPropsEqual(prev: CellProps, next: CellProps): boolean {
   return prev.cellHeight === next.cellHeight &&
     prev.entry === next.entry &&
-    prev.focused === next.focused &&
+    prev.tabStop === next.tabStop &&
     prev.handlers === next.handlers &&
     prev.navigable === next.navigable &&
     prev.onItemFocus === next.onItemFocus &&
@@ -119,6 +119,18 @@ export function GridGallery<T>({ items, renderItem, scrollContainerRef, ...optio
   const padding = options.padding ?? 0
   const navigable = options.navigable === true
 
+  // Roving tabindex: exactly one mounted cell must be tabbable. The focused cell
+  // is the tab stop when it's mounted; when virtualization has scrolled it out of
+  // view, fall back to the first mounted cell so the grid stays keyboard-reachable.
+  const firstMountedIndex = rows[0]?.items[0]?.itemIndex ?? null
+  const lastMountedIndex = rows.at(-1)?.items.at(-1)?.itemIndex ?? null
+  const focusedMounted =
+    firstMountedIndex !== null &&
+    lastMountedIndex !== null &&
+    focusedIndex >= firstMountedIndex &&
+    focusedIndex <= lastMountedIndex
+  const tabStopIndex = focusedMounted ? focusedIndex : firstMountedIndex
+
   return (
     <div
       ref={containerRef}
@@ -139,7 +151,7 @@ export function GridGallery<T>({ items, renderItem, scrollContainerRef, ...optio
               key={entry.item.key}
               cellHeight={cellHeight}
               entry={entry}
-              focused={navigable && focusedIndex === entry.itemIndex}
+              tabStop={navigable && entry.itemIndex === tabStopIndex}
               handlers={getItemRenderHandlers(entry.item.key)}
               navigable={navigable}
               onItemFocus={handleItemFocus}

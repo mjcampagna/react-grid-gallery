@@ -780,6 +780,28 @@ describe('GridGallery', () => {
     expect(renderCounts['0']).toBe(2)
     expect(renderCounts['1']).toBe(1)
   })
+
+  it('keeps a tab stop on the first mounted cell when the focused cell is scrolled out', () => {
+    render(createElement(VirtualGalleryHarness))
+
+    const scrollEl = screen.getByTestId('scroll')
+    const gridEl = screen.getByRole('grid')
+    defineReadonlyNumber(scrollEl, 'clientHeight', 200)
+    setVirtualRects(scrollEl, gridEl)
+
+    fireResize(500)
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    // Focused index defaults to 0; scroll until row 0 unmounts.
+    scrollEl.scrollTop = 500
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    const cells = screen.getAllByRole('gridcell')
+    const tabbable = cells.filter(cell => cell.getAttribute('tabindex') === '0')
+    expect(tabbable).toHaveLength(1)
+    // First mounted item (row 5, columns 5) is index 25.
+    expect(tabbable[0]).toHaveAttribute('data-grid-index', '25')
+  })
 })
 
 // ─── Keyboard navigation ──────────────────────────────────────────────────────
@@ -917,6 +939,22 @@ describe('handleItemKeyDown', () => {
     expect(onActivate).toHaveBeenCalledWith(5, false)
   })
 
+  it('is a no-op when navigable is not enabled', () => {
+    const onActivate = vi.fn()
+    const onFocusedIndexChange = vi.fn()
+    const { result } = renderHook(() =>
+      useGridGallery(ITEMS, { ...OPTIONS, onActivate, onFocusedIndexChange })
+    )
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemKeyDown(2, key('ArrowRight')) })
+    act(() => { result.current.handleItemKeyDown(2, key('Enter')) })
+
+    expect(result.current.focusedIndex).toBe(0)
+    expect(onFocusedIndexChange).not.toHaveBeenCalled()
+    expect(onActivate).not.toHaveBeenCalled()
+  })
+
   it('scrolls offscreen virtual rows into the padded viewport', () => {
     let latest: HookState | null = null
     render(createElement(VirtualHookHarness, {
@@ -986,5 +1024,31 @@ describe('controlled focusedIndex', () => {
 
     act(() => { result.current.handleItemKeyDown(1, key('ArrowDown')) })
     expect(result.current.focusedIndex).toBe(4)
+  })
+
+  it('clamps an out-of-range controlled focusedIndex to the last item', () => {
+    const { result } = renderHook(() =>
+      useGridGallery(ITEMS, { ...OPTIONS, navigable: true, focusedIndex: 99 })
+    )
+    fireResize(WIDTH)
+    expect(result.current.focusedIndex).toBe(ITEMS.length - 1)
+  })
+})
+
+// ─── Focused index clamping ─────────────────────────────────────────────────────
+
+describe('focused index clamping', () => {
+  it('clamps the focused index when items shrink below the focused position', () => {
+    const { result, rerender } = renderHook(
+      ({ items }) => useGridGallery(items, { ...OPTIONS, navigable: true }),
+      { initialProps: { items: ITEMS } },
+    )
+    fireResize(WIDTH)
+
+    act(() => { result.current.handleItemFocus(8) })
+    expect(result.current.focusedIndex).toBe(8)
+
+    rerender({ items: ITEMS.slice(0, 3) })
+    expect(result.current.focusedIndex).toBe(2)
   })
 })
