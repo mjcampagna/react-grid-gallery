@@ -38,7 +38,6 @@ function GridGalleryCellInner({
   cellHeight,
   entry,
   focused,
-  handlers,
   navigable,
   onItemFocus,
   onItemKeyDown,

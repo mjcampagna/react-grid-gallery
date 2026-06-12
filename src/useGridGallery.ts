@@ -204,6 +204,7 @@ export function useGridGallery<T>(
   const resolvedGap = finiteNonNegative(rawGap)
   const rawAspectRatio = typeof aspectRatio === 'function' ? aspectRatio(containerWidth) : (aspectRatio ?? 1)
   const resolvedAspectRatio = finitePositive(rawAspectRatio, 1)
+  const resolvedPadding = finiteNonNegative(padding)
 
   const cellWidth =
     containerWidth > 0
@@ -218,9 +219,11 @@ export function useGridGallery<T>(
   const virtualWindow = useMemo((): VirtualWindow | null => {
     if (!virtualize || virtualRange === null || totalRows === 0 || rowStride <= 0) return null
 
-    const resolvedOverscan = overscan ?? cellHeight * 4
-    const visibleTop = virtualRange.top - resolvedOverscan
-    const visibleBottom = virtualRange.bottom + resolvedOverscan
+    const resolvedOverscan = finiteNonNegative(overscan ?? cellHeight * 4, cellHeight * 4)
+    // Row 0 starts `padding` pixels below the container's top edge, but
+    // virtualRange is measured from the edge itself — shift into row coordinates.
+    const visibleTop = virtualRange.top - resolvedPadding - resolvedOverscan
+    const visibleBottom = virtualRange.bottom - resolvedPadding + resolvedOverscan
 
     const maxRowIndex = totalRows - 1
     const firstIndex = Math.min(maxRowIndex, Math.max(0, Math.floor(visibleTop / rowStride)))
@@ -230,11 +233,14 @@ export function useGridGallery<T>(
       lastIndex = firstIndex
     }
 
-    const topSpacerHeight = firstIndex * rowStride
-    const bottomSpacerHeight = (totalRows - 1 - lastIndex) * rowStride
+    // CSS inserts a flex gap between each rendered spacer and its adjacent row,
+    // so a non-zero spacer must shed one gap to keep rows at their natural offsets.
+    const topSpacerHeight = firstIndex > 0 ? firstIndex * rowStride - resolvedGap : 0
+    const hiddenRowsBelow = totalRows - 1 - lastIndex
+    const bottomSpacerHeight = hiddenRowsBelow > 0 ? hiddenRowsBelow * rowStride - resolvedGap : 0
 
     return { firstIndex, lastIndex, topSpacerHeight, bottomSpacerHeight }
-  }, [cellHeight, overscan, rowStride, totalRows, virtualRange, virtualize])
+  }, [cellHeight, overscan, resolvedGap, resolvedPadding, rowStride, totalRows, virtualRange, virtualize])
 
   const baseRows = useMemo((): BaseGridRow<T>[] => {
     if (!hasLayout) return []
@@ -341,31 +347,31 @@ export function useGridGallery<T>(
   const isControlled = controlledFocusedIndex !== undefined
 
   const scrollToRow = useCallback((rowIndex: number): void => {
-    const rowTop = padding + rowIndex * rowStride
+    const rowTop = resolvedPadding + rowIndex * rowStride
     const rowBottom = rowTop + cellHeight
     const scrollEl = resolveScrollEl(scrollContainerRef)
     if (scrollEl) {
-      const visibleTop = scrollEl.scrollTop + padding
-      const visibleBottom = scrollEl.scrollTop + scrollEl.clientHeight - padding
+      const visibleTop = scrollEl.scrollTop + resolvedPadding
+      const visibleBottom = scrollEl.scrollTop + scrollEl.clientHeight - resolvedPadding
       if (rowTop < visibleTop) {
-        scrollEl.scrollTop = rowTop - padding
+        scrollEl.scrollTop = rowTop - resolvedPadding
       } else if (rowBottom > visibleBottom) {
-        scrollEl.scrollTop = rowBottom - scrollEl.clientHeight + padding
+        scrollEl.scrollTop = rowBottom - scrollEl.clientHeight + resolvedPadding
       }
     } else {
       const containerEl = containerRef.current
       if (!containerEl) return
       const absTop = containerEl.getBoundingClientRect().top + window.scrollY + rowTop
       const absBottom = absTop + cellHeight
-      const visibleTop = window.scrollY + padding
-      const visibleBottom = window.scrollY + window.innerHeight - padding
+      const visibleTop = window.scrollY + resolvedPadding
+      const visibleBottom = window.scrollY + window.innerHeight - resolvedPadding
       if (absTop < visibleTop) {
-        window.scrollTo({ top: absTop - padding })
+        window.scrollTo({ top: absTop - resolvedPadding })
       } else if (absBottom > visibleBottom) {
-        window.scrollTo({ top: absBottom - window.innerHeight + padding })
+        window.scrollTo({ top: absBottom - window.innerHeight + resolvedPadding })
       }
     }
-  }, [cellHeight, padding, rowStride, scrollContainerRef])
+  }, [cellHeight, resolvedPadding, rowStride, scrollContainerRef])
 
   const navigateTo = useCallback((newIndex: number): void => {
     if (items.length === 0) return

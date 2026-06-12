@@ -498,6 +498,97 @@ describe('layout', () => {
   })
 })
 
+// ─── Virtualization geometry ─────────────────────────────────────────────────
+
+describe('virtualization geometry', () => {
+  it('subtracts the flex gap from spacers so total scroll height matches the unvirtualized layout', () => {
+    let latest: HookState | null = null
+    render(createElement(VirtualHookHarness, {
+      onValue: value => { latest = value },
+      options: { columns: 5, gap: 4, virtualize: true, overscan: 0 },
+    }))
+
+    const scrollEl = screen.getByTestId('scroll')
+    const gridEl = screen.getByTestId('grid')
+    defineReadonlyNumber(scrollEl, 'clientHeight', 200)
+    setVirtualRects(scrollEl, gridEl, { scrollTop: 500 })
+
+    // (520 - 4*4) / 5 → 100px cells, 104px row stride, 20 rows
+    fireResize(520)
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    const state = getLatest(latest)
+    const vw = state.virtualWindow
+    if (vw === null) throw new Error('virtual window not computed')
+
+    expect(state.rows.map(row => row.rowIndex)).toEqual([4, 5, 6])
+    expect(vw.topSpacerHeight).toBe(412) // 4 rows * 104 - one gap absorbed by CSS
+    expect(vw.bottomSpacerHeight).toBe(1348) // 13 rows * 104 - one gap absorbed by CSS
+
+    // spacer + gap + visible rows with gaps + gap + spacer === unvirtualized height
+    const visibleHeight = state.rows.length * state.cellHeight + (state.rows.length - 1) * state.gap
+    const totalHeight = vw.topSpacerHeight + state.gap + visibleHeight + state.gap + vw.bottomSpacerHeight
+    expect(totalHeight).toBe(state.totalRows * state.cellHeight + (state.totalRows - 1) * state.gap)
+  })
+
+  it('offsets virtual row indices by the container padding', () => {
+    let latest: HookState | null = null
+    render(createElement(VirtualHookHarness, {
+      onValue: value => { latest = value },
+      options: { columns: 5, padding: 50, virtualize: true, overscan: 0 },
+    }))
+
+    const scrollEl = screen.getByTestId('scroll')
+    const gridEl = screen.getByTestId('grid')
+    defineReadonlyNumber(scrollEl, 'clientHeight', 200)
+    setVirtualRects(scrollEl, gridEl, { scrollTop: 120 })
+
+    fireResize(500)
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    // viewport covers 120–320; rows sit at padding + i*100, so rows 0–2 overlap.
+    // Without the padding offset this would skip row 0 while it is still visible.
+    expect(getLatest(latest).rows.map(row => row.rowIndex)).toEqual([0, 1, 2])
+  })
+
+  it('falls back to the default overscan when overscan is not finite', () => {
+    let latest: HookState | null = null
+    render(createElement(VirtualHookHarness, {
+      onValue: value => { latest = value },
+      options: { columns: 5, virtualize: true, overscan: Number.NaN },
+    }))
+
+    const scrollEl = screen.getByTestId('scroll')
+    const gridEl = screen.getByTestId('grid')
+    defineReadonlyNumber(scrollEl, 'clientHeight', 200)
+    setVirtualRects(scrollEl, gridEl)
+
+    fireResize(500)
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    // default overscan = cellHeight * 4 = 400px → viewport 0–200 extends to rows 0–5
+    expect(getLatest(latest).rows.map(row => row.rowIndex)).toEqual([0, 1, 2, 3, 4, 5])
+  })
+
+  it('treats non-finite padding as zero instead of blanking the gallery', () => {
+    let latest: HookState | null = null
+    render(createElement(VirtualHookHarness, {
+      onValue: value => { latest = value },
+      options: { columns: 5, padding: Number.NaN, virtualize: true, overscan: 0 },
+    }))
+
+    const scrollEl = screen.getByTestId('scroll')
+    const gridEl = screen.getByTestId('grid')
+    defineReadonlyNumber(scrollEl, 'clientHeight', 200)
+    setVirtualRects(scrollEl, gridEl)
+
+    fireResize(500)
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    expect(getLatest(latest).rows.map(row => row.rowIndex)).toEqual([0, 1])
+  })
+})
+
 // ─── Component Rendering ─────────────────────────────────────────────────────
 
 describe('GridGallery', () => {
