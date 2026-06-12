@@ -280,6 +280,32 @@ describe('layout', () => {
     expect(state.rows[0].items.map(entry => entry.itemIndex)).toEqual([25, 26, 27, 28, 29])
   })
 
+  it('preserves row identity for rows that overlap after a window shift', () => {
+    let latest: HookState | null = null
+
+    render(createElement(VirtualHookHarness, { onValue: value => { latest = value } }))
+
+    const scrollEl = screen.getByTestId('scroll')
+    const gridEl = screen.getByTestId('grid')
+    defineReadonlyNumber(scrollEl, 'clientHeight', 200)
+    setVirtualRects(scrollEl, gridEl)
+
+    fireResize(500)
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    const before = getLatest(latest)
+    expect(before.rows.map(row => row.rowIndex)).toEqual([0, 1])
+    const sharedRow = before.rows[1] // rowIndex 1, currently at offset 1
+
+    // Shift the window down by a single row; row 1 stays mounted at offset 0.
+    scrollEl.scrollTop = 100
+    act(() => { scrollEl.dispatchEvent(new Event('scroll')) })
+
+    const after = getLatest(latest)
+    expect(after.rows.map(row => row.rowIndex)).toEqual([1, 2])
+    expect(after.rows[0]).toBe(sharedRow)
+  })
+
   it('keeps virtualized rows limited after offscreen loads', () => {
     let latest: HookState | null = null
     render(createElement(VirtualHookHarness, { onValue: value => { latest = value } }))

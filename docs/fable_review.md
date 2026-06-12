@@ -187,7 +187,7 @@ No test exercises `virtualize` together with a non-zero `gap` (would catch findi
 | 12 | ~~Bug (a11y)~~ | ~~Roving tabindex can have zero tab stops (virtualized scroll, or shrinking items)~~ ✓ |
 | 13 | ~~Bug~~ | ~~Virtualized first paint is empty; no SSR content~~ ✓ (see note below) |
 | 14 | ~~Perf~~ | ~~New `range` object allocated per scroll/resize event even when unchanged~~ ✓ |
-| 15 | Perf | Row reuse keyed by array offset defeats cell memoization on every scroll step |
+| 15 | ~~Perf~~ | ~~Row reuse keyed by array offset defeats cell memoization on every scroll step~~ ✓ |
 | 16 | ~~Bug~~ | ~~Scroll element resolved once at mount — stale-element trap when ref is late or remounts~~ ✓ |
 | 17 | API | Broken images stay `loaded: false` forever; no error state exposed |
 | 18 | API | Reported integer `width` differs sub-pixel from rendered `1fr` track width |
@@ -213,7 +213,7 @@ No test exercises `virtualize` together with a non-zero `gap` (would catch findi
 | ~~3~~ | ~~Replace `controlledFocusedIndex!` with `?? focusedIndex`~~ | ~~Sonnet~~ ✓ |
 | ~~6~~ | ~~Return `itemKeys` from `useGridGallery`, reuse in `GridGallery`~~ | ~~Sonnet~~ ✓ |
 | ~~7~~ | ~~Collapse `CellProps`/`MemoCellProps` duplication and the pass-through wrapper~~ | ~~Sonnet~~ ✓ |
-| 15 | Re-key row reuse by `rowIndex` instead of array offset | Opus |
+| ~~15~~ | ~~Re-key row reuse by `rowIndex` instead of array offset~~ | ~~Opus~~ ✓ |
 | — | Delete the empty `src/docs/` directory | anyone |
 
 Finding 15 is independent in scope (the `rows` memo only) but subtle — it interacts with `previousRowsRef`, the StrictMode reuse tests, and the memo-cell identity guarantees, so it is Opus-grade rather than mechanical.

@@ -292,10 +292,19 @@ export function useGridGallery<T>(
     if (baseRows.length === 0) {
       return []
     }
+
+    // Key previous rows by rowIndex, not array offset: when the virtual window
+    // shifts, the overlapping rows land at different offsets but keep their
+    // rowIndex, so this preserves their identity (and their memoized cells).
+    const previousByRowIndex = new Map<number, GridRow<T>>()
+    for (const previousRow of previousRows) {
+      previousByRowIndex.set(previousRow.rowIndex, previousRow)
+    }
+
     let allRowsReused = previousRows.length === baseRows.length
 
-    const nextRows = baseRows.map((baseRow, rowOffset) => {
-      const previousRow = previousRows[rowOffset]
+    const nextRows = baseRows.map(baseRow => {
+      const previousRow = previousByRowIndex.get(baseRow.rowIndex)
       let rowReused = previousRow != null && rowsMatch(previousRow, baseRow)
 
       const nextItems = baseRow.items.map((baseItem, itemOffset) => {
