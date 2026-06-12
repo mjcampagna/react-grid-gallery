@@ -176,8 +176,8 @@ No test exercises `virtualize` together with a non-zero `gap` (would catch findi
 | 1 | ~~Bug~~ | ~~Spacer heights inflated by `gap`, causing incorrect scroll height and row misalignment in virtualized galleries~~ ✓ |
 | 2 | ~~Bug~~ | ~~`padding` not subtracted before virtual row index calculation~~ ✓ |
 | 3 | ~~Type~~ | ~~`!` non-null assertion against workspace convention~~ ✓ |
-| 4 | API | `GridLayoutRow.width` misleadingly named (stores `cellWidth`) |
-| 5 | API | `GridItemRenderHandlers` exposes three redundant paths to the same props |
+| 4 | ~~API~~ | ~~`GridLayoutRow.width` misleadingly named (stores `cellWidth`)~~ ✓ |
+| 5 | ~~API~~ | ~~`GridItemRenderHandlers` exposes three redundant paths to the same props~~ ✓ |
 | 6 | ~~Perf~~ | ~~`itemKeys` computed independently in both `useGridGallery` and `GridGallery`~~ ✓ |
 | 7 | ~~Quality~~ | ~~`CellProps<T>` / `MemoCellProps` near-duplicate types with pass-through wrapper~~ ✓ |
 | 8 | ~~Quality~~ | ~~Inconsistent debounce strategy for scroll vs. resize in `useVirtualWindow`~~ ✓ |
@@ -189,8 +189,8 @@ No test exercises `virtualize` together with a non-zero `gap` (would catch findi
 | 14 | ~~Perf~~ | ~~New `range` object allocated per scroll/resize event even when unchanged~~ ✓ |
 | 15 | ~~Perf~~ | ~~Row reuse keyed by array offset defeats cell memoization on every scroll step~~ ✓ |
 | 16 | ~~Bug~~ | ~~Scroll element resolved once at mount — stale-element trap when ref is late or remounts~~ ✓ |
-| 17 | API | Broken images stay `loaded: false` forever; no error state exposed |
-| 18 | API | Reported integer `width` differs sub-pixel from rendered `1fr` track width |
+| 17 | ~~API~~ | ~~Broken images stay `loaded: false` forever; no error state exposed~~ ✓ |
+| 18 | ~~API~~ | ~~Reported integer `width` differs sub-pixel from rendered `1fr` track width~~ ✓ |
 | 19 | ~~Tests~~ | ~~No coverage for `virtualize` + `gap` or `virtualize` + `padding`~~ ✓ |
 
 **Note on 13:** the flash was fixed by moving the listener setup and initial publish to `useLayoutEffect`, so the first range lands before paint. The SSR half turned out to be moot: layout depends on `containerWidth` from ResizeObserver, so server-rendered output has zero rows whether or not `virtualize` is set — that is a pre-existing property of the measurement model, not a virtualization regression.
@@ -204,7 +204,7 @@ No test exercises `virtualize` together with a non-zero `gap` (would catch findi
 - ~~**Cluster A — Virtualization geometry: 1, 2, 11, 19.** → **Fable.**~~ ✓ Done (commit `132ce2c`). All live in the same ~20 lines of the `virtualWindow` memo; one scroll-height invariant test proves all of it.
 - ~~**Cluster B — `useVirtualWindow` rework: 8, 9, 13, 14, 16.** → **Fable.**~~ ✓ Done. The hook now resolves the scroll element into state via a per-render layout effect (fixes 9 and 16: late refs, remounts, and unstable ref identity all re-attach correctly), routes scroll and resize through the same rAF-debounced update (8), bails out of `setRange` when the range is unchanged (14), and runs listener setup plus the initial publish in `useLayoutEffect` so the first range lands before paint (13).
 - ~~**Cluster C — Focus & keyboard navigation: 10, 12.** → **Opus.**~~ ✓ Done. The hook now reads the `navigable` option and bails out of `navigateTo`/`handleItemKeyDown` when it's off (10), and clamps the effective focused index into `[0, items.length - 1]` so a stale or out-of-range value never points past the list (12, shrinking items). `GridGallery` separates the roving tab stop from visual focus: when virtualization scrolls the focused cell out of the mounted window, the first mounted cell becomes the lone `tabIndex={0}` stop so the grid stays keyboard-reachable (12, virtualized scroll). Four tests added.
-- **Cluster D — Public API revision: 4, 5, 17, 18.** → **Opus.** Breaking or surface-area changes to exported types; ship as one coordinated semver bump through the slithy monorepo. API design judgment plus changelog discipline, not hard algorithms.
+- ~~**Cluster D — Public API revision: 4, 5, 17, 18.** → **Opus.**~~ ✓ Done (no back-compat — consuming projects are updated in lockstep). `GridLayoutRow.width` renamed to `cellWidth` (4) with a JSDoc note that it's the floored integer, not the exact `1fr` track width (18). `GridItemRenderHandlers` collapsed to a single `imageProps` field — the top-level spread and `getImageProps()` are gone (5). `onError(key)` now marks the item terminal-loaded so a broken image's cell still appears instead of hiding behind a fade-in forever (17). Two tests added; README + CLAUDE.md updated. **Ships as a major version bump through slithy** (breaking type changes).
 
 ### Independent items
 

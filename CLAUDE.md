@@ -38,7 +38,7 @@ The library exposes three levels of abstraction, all exported from `src/index.ts
 
 **Virtualization:** Opt-in via `virtualize` prop. Because all rows have uniform height, the visible range is computed in O(1) via direct arithmetic rather than scanning cumulative offsets. Implemented via `useVirtualWindow` ([src/useVirtualWindow.ts](src/useVirtualWindow.ts)) — passive scroll listener debounced with `requestAnimationFrame`.
 
-**`loaded` state:** `onLoad(key)` marks an item as loaded (triggers rerender for fade-in effects). `onError` is a no-op at layout level (cell size is fixed regardless of load outcome) but is exposed for API symmetry so consumers have a stable handler ref.
+**`loaded` state:** `onLoad(key)` marks an item as loaded (triggers rerender for fade-in effects). `onError(key)` treats a load failure as terminal and also marks the item loaded — so a broken image's cell still becomes visible (showing whatever the broken `<img>` renders) instead of staying hidden behind a fade-in forever. Cell size is fixed regardless of load outcome.
 
 **`scrollContainerRef`:** When the gallery is inside a scrollable div, pass a ref to that element. The scroll listener attaches to it instead of `window`, and `clientHeight` is used instead of `window.innerHeight`.
 

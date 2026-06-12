@@ -85,12 +85,9 @@ import { GridGallery } from '@slithy/react-grid-gallery'
 | Argument | Type | Description |
 |---|---|---|
 | `item` | `GalleryItem<T>` | The original item |
-| `layout.loaded` | `boolean` | Whether the browser has confirmed this image loaded via `handlers.onLoad` |
+| `layout.loaded` | `boolean` | Whether the browser has settled this image — set on both load **and** error, so a broken image still becomes visible rather than staying hidden behind a fade-in |
 | `layout.focused` | `boolean` | Whether this cell is currently focused. Always `false` when `navigable` is not set. |
-| `handlers.onLoad` | `ReactEventHandler<HTMLImageElement>` | Pass to `<img onLoad={...}>` to mark the item loaded |
-| `handlers.onError` | `ReactEventHandler<HTMLImageElement>` | Pass to `<img onError={...}>` for error handling |
-| `handlers.imageProps` | `{ onLoad, onError }` | Stable image props object for the current item. Preferred for memoized item UIs. |
-| `handlers.getImageProps()` | `() => { onLoad, onError }` | Returns the same stable image props object as `handlers.imageProps`. |
+| `handlers.imageProps` | `{ onLoad, onError }` | Stable image props object for the current item. Spread onto your `<img>`: `{...handlers.imageProps}`. |
 
 ---
 
@@ -303,7 +300,7 @@ const { containerRef, rows, totalRows, cellWidth, cellHeight, gap, columns, onLo
 | `gap` | `number` | Resolved gap in pixels |
 | `columns` | `number` | Resolved column count |
 | `onLoad` | `(key: string \| number) => void` | Call when an image loads to mark it loaded |
-| `onError` | `(key: string \| number) => void` | Call when an image fails to load |
+| `onError` | `(key: string \| number) => void` | Call when an image fails to load — marks the item loaded (terminal) so its cell still appears |
 | `getItemImageProps` | `(key: string \| number) => { onLoad, onError }` | Returns a stable image props object for the given item key. |
 | `virtualWindow` | `{ firstIndex, lastIndex, topSpacerHeight, bottomSpacerHeight } \| null` | Rendered row window and spacer heights when `virtualize` is true |
 | `focusedIndex` | `number` | Currently focused item index. Reflects `options.focusedIndex` when controlled. |
@@ -325,4 +322,4 @@ const rows = computeGridLayout(items, 4, 200, 250)
 // 4 columns, 200px wide cells, 250px tall cells
 ```
 
-**Returns:** `GridLayoutRow<T>[]` — each row has `items: GalleryItem<T>[]`, `width: number`, and `height: number`.
+**Returns:** `GridLayoutRow<T>[]` — each row has `items: GalleryItem<T>[]`, `cellWidth: number`, and `height: number`. `cellWidth` is the floored integer cell width; cells render as `1fr` tracks, so treat it as an approximation for `sizes`/`srcset`, not a pixel-exact width.

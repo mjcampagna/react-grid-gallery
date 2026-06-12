@@ -106,12 +106,7 @@ export function GridGallery<T>({ items, renderItem, scrollContainerRef, ...optio
     const cached = renderHandlersCacheRef.current.get(key)
     if (cached) return cached
 
-    const imageProps = getItemImageProps(key)
-    const nextHandlers = {
-      ...imageProps,
-      imageProps,
-      getImageProps: () => imageProps,
-    }
+    const nextHandlers = { imageProps: getItemImageProps(key) }
     renderHandlersCacheRef.current.set(key, nextHandlers)
     return nextHandlers
   }, [getItemImageProps])

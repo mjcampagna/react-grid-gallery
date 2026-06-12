@@ -58,7 +58,7 @@ describe('computeGridLayout', () => {
       const items = ['a', 'b', 'c', 'd'].map(item)
       const rows = computeGridLayout(items, 2, 150, 120)
       for (const row of rows) {
-        expect(row.width).toBe(150)
+        expect(row.cellWidth).toBe(150)
         expect(row.height).toBe(120)
       }
     })

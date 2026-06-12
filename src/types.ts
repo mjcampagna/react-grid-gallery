@@ -37,9 +37,9 @@ export type GridItemImageProps = {
   onError: ReactEventHandler<HTMLImageElement>
 }
 
-export type GridItemRenderHandlers = GridItemImageProps & {
+export type GridItemRenderHandlers = {
+  /** Stable props to spread onto the rendered `<img>` (`{...handlers.imageProps}`). */
   imageProps: GridItemImageProps
-  getImageProps: () => GridItemImageProps
 }
 
 export type GalleryItem<T> = T & {
@@ -48,7 +48,13 @@ export type GalleryItem<T> = T & {
 
 export type GridLayoutRow<T> = {
   items: GalleryItem<T>[]
-  width: number
+  /**
+   * Uniform cell width in px. This is the floored integer width; cells are
+   * actually laid out with `1fr` tracks, so the rendered width is the exact
+   * fractional `(containerWidth - gaps) / columns`. Use this as an approximation
+   * for `sizes`/`srcset` math, not a pixel-exact measurement.
+   */
+  cellWidth: number
   height: number
 }
 

@@ -21,7 +21,7 @@ export function computeGridLayout<T>(
   for (let i = 0; i < items.length; i += columnCount) {
     rows.push({
       items: items.slice(i, i + columnCount),
-      width: cellWidth,
+      cellWidth,
       height: cellHeight,
     })
   }

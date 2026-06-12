@@ -418,6 +418,17 @@ describe('layout', () => {
     expect(result.current.getItemImageProps('0').onError).toBe(before.onError)
   })
 
+  it('marks an item loaded when its image errors', () => {
+    const { result } = renderHook(() => useGridGallery(ITEMS, OPTIONS))
+    fireResize(WIDTH)
+
+    expect(result.current.rows[0]?.items[0]?.loaded).toBe(false)
+
+    act(() => { result.current.onError('0') })
+
+    expect(result.current.rows[0]?.items[0]?.loaded).toBe(true)
+  })
+
   it('prunes stale loaded state and preserves handler identity for unaffected keys', () => {
     const firstItems = ['0', '1', '2'].map(item)
     const secondItems = ['1', '3'].map(item)
@@ -792,7 +803,7 @@ describe('GridGallery', () => {
         createElement(MemoPhoto, {
           itemKey: galleryItem.key,
           loaded: layout.loaded,
-          imageProps: handlers.getImageProps(),
+          imageProps: handlers.imageProps,
         }),
     }))
 

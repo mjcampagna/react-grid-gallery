@@ -185,7 +185,12 @@ export function useGridGallery<T>(
     })
   }, [])
 
-  const onError = useCallback((_key: string | number) => {}, [])
+  // Treat a load failure as terminal: mark the item loaded so fade-in-on-loaded
+  // cells become visible (showing whatever the broken <img> renders) instead of
+  // staying invisible forever. Cell size is fixed regardless of load outcome.
+  const onError = useCallback((key: string | number) => {
+    onLoad(key)
+  }, [onLoad])
 
   const getItemImageProps = useCallback((key: string | number): GridItemImageProps => {
     const cached = imagePropsCacheRef.current.get(key)
