@@ -299,6 +299,7 @@ const { containerRef, rows, totalRows, cellWidth, cellHeight, gap, columns, onLo
 | `cellHeight` | `number` | Resolved cell height in pixels |
 | `gap` | `number` | Resolved gap in pixels |
 | `columns` | `number` | Resolved column count |
+| `itemKeys` | `ReadonlySet<string \| number>` | Set of all item keys in the full collection. Useful for pruning per-item caches keyed on item key. |
 | `onLoad` | `(key: string \| number) => void` | Call when an image loads to mark it loaded |
 | `onError` | `(key: string \| number) => void` | Call when an image fails to load — marks the item loaded (terminal) so its cell still appears |
 | `getItemImageProps` | `(key: string \| number) => { onLoad, onError }` | Returns a stable image props object for the given item key. |
